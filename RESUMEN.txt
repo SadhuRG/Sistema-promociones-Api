@@ -1,0 +1,228 @@
+================================================================================
+  RESUMEN DEL PROYECTO - Sistema de Promociones Roma Salud (API)
+================================================================================
+  Última actualización: 2026-08-18
+  Estado general: CRUDs completos + Storage de imágenes (bucket flyers)
+================================================================================
+
+------------------------------------------------------------------------------
+1. STACK Y CONEXIÓN
+------------------------------------------------------------------------------
+- Framework: FastAPI
+- ORM: SQLAlchemy (síncrono)
+- BD: PostgreSQL en Supabase
+- Auth: JWT de Supabase Auth (validación con JWKS)
+- Storage: Supabase Storage (cliente oficial supabase-py)
+- Config: pydantic-settings (.env)
+- Prefijo API: /api/v1
+- Docs: http://127.0.0.1:8000/docs
+
+Variables de entorno (.env):
+  - DATABASE_URL
+  - SUPABASE_URL
+  - SUPABASE_JWKS_URL
+  - SUPABASE_KEY              (Anon Key o Service Role Key)
+  - SUPABASE_STORAGE_BUCKET   (default: flyers)
+
+Cómo levantar:
+  uvicorn app.main:app --reload
+
+Cómo correr seeder:
+  python -m app.db.seeder
+
+
+------------------------------------------------------------------------------
+2. ESTRUCTURA DE CARPETAS (ACTUAL)
+------------------------------------------------------------------------------
+Sistema-promociones-Api/
+├── .env
+├── .gitignore
+├── requirements.txt
+├── RESUMEN.txt
+└── app/
+    ├── main.py
+    ├── core/
+    │   ├── config.py
+    │   ├── security.py
+    │   └── storage.py          <-- upload_image_to_supabase()
+    ├── db/
+    │   ├── database.py
+    │   └── seeder.py
+    ├── models/
+    │   └── all_models.py
+    ├── schemas/
+    │   └── all_schemas.py
+    └── api/
+        └── routes/
+            ├── helpers.py
+            ├── auth.py
+            ├── especialidades.py
+            ├── doctores.py
+            ├── promociones.py
+            ├── horarios.py
+            └── informes.py
+
+
+------------------------------------------------------------------------------
+3. BASE DE DATOS (SUPABASE) - TABLAS
+------------------------------------------------------------------------------
+Tablas principales:
+  - especialidades
+  - users                 (vinculada a auth.users por id_user_supabase UUID)
+  - doctores
+  - promociones
+  - informes
+  - horario
+
+Tablas intermedias (many-to-many):
+  - doctor_especialidad
+  - promocion_especialidad
+  - informe_especialidad
+
+Roles en users:
+  - User (por defecto al registrarse vía trigger de Supabase)
+  - Admin (se asigna manualmente en BD)
+
+Estados comunes:
+  - Activo / Inactivo
+
+Storage:
+  - Bucket público: flyers
+  - Carpetas lógicas: promociones/, informes/
+
+
+------------------------------------------------------------------------------
+4. MODELOS SQLALCHEMY (YA MAPEADOS)
+------------------------------------------------------------------------------
+Archivo: app/models/all_models.py
+
+  [x] Especialidad
+  [x] User
+  [x] Doctor
+  [x] Promocion
+  [x] Informe
+  [x] Horario
+  [x] doctor_especialidad (Table)
+  [x] promocion_especialidad (Table)
+  [x] informe_especialidad (Table)
+
+
+------------------------------------------------------------------------------
+5. SCHEMAS PYDANTIC (YA CREADOS)
+------------------------------------------------------------------------------
+Archivo: app/schemas/all_schemas.py
+
+  Especialidades: Base, Create, Update, Response
+  Usuarios:       Base, Create, Response
+  Doctores:       Base, Create, Update, Response (+ especialidades)
+  Promociones:    Base, Create, Update, Response (+ especialidades)
+  Informes:       Base, Create, Update, Response (+ especialidades)
+  Horarios:       Base, Create, Update, Response
+
+
+------------------------------------------------------------------------------
+6. SEGURIDAD Y STORAGE
+------------------------------------------------------------------------------
+Archivo: app/core/security.py
+  - get_current_user       -> valida JWT + busca en users + estado Activo
+  - get_current_admin_user -> exige rol Admin (403 si no)
+
+Archivo: app/core/storage.py
+  - upload_image_to_supabase(file, folder) -> URL pública
+  - Extensiones: .jpg .jpeg .png .gif .webp .svg
+  - Nombre único con UUID
+
+Header en rutas protegidas:
+  Authorization: Bearer <access_token_supabase>
+
+
+------------------------------------------------------------------------------
+7. ENDPOINTS
+------------------------------------------------------------------------------
+
+[PÚBLICOS]
+  GET  /
+  GET  /api/v1/especialidades/
+  GET  /api/v1/especialidades/{id}
+  GET  /api/v1/doctores/                         (?estado, ?especialidad_id)
+  GET  /api/v1/doctores/{id}
+  GET  /api/v1/promociones/                      (?especialidad_id, ?estado, ?titulo)
+  GET  /api/v1/promociones/{id}
+  GET  /api/v1/horarios/                         (?id_doctor, ?estado)
+  GET  /api/v1/horarios/{id}
+  GET  /api/v1/informes/                         (?especialidad_id, ?titulo)
+  GET  /api/v1/informes/{id}
+
+[AUTENTICADOS - JWT]
+  GET  /api/v1/auth/me
+
+[SOLO ADMIN]
+  POST/PUT/DELETE  /api/v1/especialidades/...
+  POST/PUT/DELETE  /api/v1/doctores/...
+  POST/PUT/DELETE  /api/v1/promociones/...       (multipart: imagen opcional)
+  POST/PUT/DELETE  /api/v1/horarios/...
+  POST/PUT/DELETE  /api/v1/informes/...          (multipart: imagen opcional)
+
+Notas multipart (promociones / informes):
+  - Content-Type: multipart/form-data
+  - Campo archivo: imagen
+  - especialidad_ids: "1,2,3" o "[1,2,3]"
+
+
+------------------------------------------------------------------------------
+8. PERMISOS POR RECURSO
+------------------------------------------------------------------------------
+Recurso          | GET | POST | PUT | DELETE
+-----------------+-----+------+-----+--------
+Especialidades   | Pub | Adm  | Adm |  Adm
+Doctores         | Pub | Adm  | Adm |  Adm
+Promociones      | Pub | Adm  | Adm |  Adm
+Horarios         | Pub | Adm  | Adm |  Adm
+Informes         | Pub | Adm  | Adm |  Adm
+Auth /me         | Aut |  -   |  -  |   -
+
+Leyenda: Pub = Público | Aut = JWT | Adm = Admin
+
+
+------------------------------------------------------------------------------
+9. SEEDER (DATOS INICIALES)
+------------------------------------------------------------------------------
+Archivo: app/db/seeder.py
+Condición: solo inserta si las tablas están vacías.
+
+Ya ejecutado:
+  [x] 5 especialidades (Medicina General, Pediatría, Gine, Cardio, Trauma)
+  [x] 2 doctores de prueba
+
+
+------------------------------------------------------------------------------
+10. PENDIENTE / PRÓXIMOS PASOS
+------------------------------------------------------------------------------
+  [ ] Pegar SUPABASE_KEY real en .env (Project Settings > API)
+  [ ] Crear bucket público "flyers" en Supabase Storage (si aún no existe)
+  [ ] Tests unitarios / de integración
+  [ ] Restringir CORS en producción (quitar "*")
+  [ ] Borrado de imágenes antiguas al reemplazar en Storage (opcional)
+
+
+------------------------------------------------------------------------------
+11. HISTORIAL DE AVANCES
+------------------------------------------------------------------------------
+2026-08-18 (sesión 1)
+  - Conexión a Supabase verificada
+  - Config + database + modelos + schemas
+  - Seguridad JWT + rutas auth/promociones/horarios básicas
+  - Seeder + RESUMEN.txt
+
+2026-08-18 (sesión 2)
+  - Storage: app/core/storage.py (bucket flyers)
+  - CRUD completo: especialidades, doctores, promociones, horarios, informes
+  - Filtros en GET (especialidad, estado, titulo, id_doctor)
+  - POST/PUT promociones e informes con UploadFile
+  - Schemas Update + Doctor/Informe
+  - Routers registrados en main.py (/api/v1)
+
+================================================================================
+  NOTA: Actualizar este archivo cada vez que se agregue un endpoint,
+  modelo, permiso o se complete un módulo.
+================================================================================
