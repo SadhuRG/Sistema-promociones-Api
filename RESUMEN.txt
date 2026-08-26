@@ -1,8 +1,8 @@
 ================================================================================
   RESUMEN DEL PROYECTO - Sistema de Promociones Roma Salud (API)
 ================================================================================
-  Última actualización: 2026-08-18
-  Estado general: CRUDs completos + Storage de imágenes (bucket flyers)
+  Última actualización: 2026-08-26
+  Estado general: Listo para preparar deploy en Railway (sin deploy aún)
 ================================================================================
 
 ------------------------------------------------------------------------------
@@ -10,25 +10,31 @@
 ------------------------------------------------------------------------------
 - Framework: FastAPI
 - ORM: SQLAlchemy (síncrono)
-- BD: PostgreSQL en Supabase
+- Migraciones: Alembic (001_inicial)
+- BD: PostgreSQL (Supabase en desarrollo / Railway en producción)
 - Auth: JWT de Supabase Auth (validación con JWKS)
 - Storage: Supabase Storage (cliente oficial supabase-py)
 - Config: pydantic-settings (.env)
 - Prefijo API: /api/v1
+- Health: GET /health
 - Docs: http://127.0.0.1:8000/docs
 
 Variables de entorno (.env):
   - DATABASE_URL
   - SUPABASE_URL
   - SUPABASE_JWKS_URL
-  - SUPABASE_KEY              (Anon Key o Service Role Key)
-  - SUPABASE_STORAGE_BUCKET   (default: flyers)
+  - SUPABASE_KEY
+  - SUPABASE_STORAGE_BUCKET
+  - CORS_ORIGINS
 
 Cómo levantar:
-  uvicorn app.main:app --reload
+  uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 Cómo correr seeder:
   python -m app.db.seeder
+
+Railway start:
+  uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
 
 ------------------------------------------------------------------------------
@@ -87,7 +93,7 @@ Estados comunes:
   - Activo / Inactivo
 
 Storage:
-  - Bucket público: flyers
+  - Bucket público: flayers
   - Carpetas lógicas: promociones/, informes/
 
 
@@ -198,10 +204,14 @@ Ya ejecutado:
 ------------------------------------------------------------------------------
 10. PENDIENTE / PRÓXIMOS PASOS
 ------------------------------------------------------------------------------
-  [ ] Pegar SUPABASE_KEY real en .env (Project Settings > API)
-  [ ] Crear bucket público "flyers" en Supabase Storage (si aún no existe)
+  [x] Arquitectura: Railway (API) → Supabase (Postgres + Auth + Storage)
+  [x] Bucket Storage: flayers
+  [x] CORS configurable por env (CORS_ORIGINS)
+  [x] /health + railway.toml sin migraciones automáticas
+  [ ] Configurar CORS_ORIGINS con URL real del frontend en producción
+  [ ] Commit/push manual a GitHub (sin subir .env)
+  [ ] Deploy en Railway (pendiente — no hecho aún)
   [ ] Tests unitarios / de integración
-  [ ] Restringir CORS en producción (quitar "*")
   [ ] Borrado de imágenes antiguas al reemplazar en Storage (opcional)
 
 
@@ -215,12 +225,20 @@ Ya ejecutado:
   - Seeder + RESUMEN.txt
 
 2026-08-18 (sesión 2)
-  - Storage: app/core/storage.py (bucket flyers)
+  - Storage: app/core/storage.py (bucket flayers)
   - CRUD completo: especialidades, doctores, promociones, horarios, informes
   - Filtros en GET (especialidad, estado, titulo, id_doctor)
   - POST/PUT promociones e informes con UploadFile
   - Schemas Update + Doctor/Informe
   - Routers registrados en main.py (/api/v1)
+
+2026-08-26 (sesión 3 — prep Railway)
+  - .env.example, .gitignore reforzado, README.md
+  - CORS_ORIGINS + /health + normalización postgres://
+  - Alembic + scripts/schema_postgresql.sql + NOTAS_ESQUEMA.md
+  - railway.toml (startCommand, healthcheck; releaseCommand comentado)
+  - requirements.txt limpio (+ alembic)
+  - __pycache__ sacado del tracking de Git
 
 ================================================================================
   NOTA: Actualizar este archivo cada vez que se agregue un endpoint,
