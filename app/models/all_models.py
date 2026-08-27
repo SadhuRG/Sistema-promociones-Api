@@ -81,7 +81,7 @@ class Especialidad(Base):
 
     id_especialidad = Column(BigInteger, primary_key=True, autoincrement=True)
     nombre = Column(String(100), nullable=False)
-    numero = Column(String, nullable=True)
+    numero = Column(String(100), nullable=True)
     code = Column(String(100), nullable=True)
     estado = Column(String(20), default="Activo", nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

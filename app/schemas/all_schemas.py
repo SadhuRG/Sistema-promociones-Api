@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 class EspecialidadBase(BaseModel):
     nombre: str = Field(..., max_length=100)
-    numero: Optional[int] = None
+    numero: Optional[str] = Field(None, max_length=100)
     code: Optional[str] = Field(None, max_length=100)
     estado: str = "Activo"
 
@@ -22,7 +22,7 @@ class EspecialidadCreate(EspecialidadBase):
 
 class EspecialidadUpdate(BaseModel):
     nombre: Optional[str] = Field(None, max_length=100)
-    numero: Optional[int] = None
+    numero: Optional[str] = Field(None, max_length=100)
     code: Optional[str] = Field(None, max_length=100)
     estado: Optional[str] = None
 
