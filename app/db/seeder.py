@@ -3,6 +3,9 @@ Seeder independiente para datos iniciales.
 
 Uso (desde la raíz del proyecto):
     python -m app.db.seeder
+
+Nota V2: ya no existe doctor_especialidad. Los doctores se crean sin
+especialidades; esa relación vive en horario (cuando se carguen).
 """
 
 from sqlalchemy.orm import Session
@@ -11,22 +14,16 @@ from app.db.database import SessionLocal
 from app.models.all_models import Doctor, Especialidad
 
 ESPECIALIDADES_INICIALES = [
-    {"nombre": "Medicina General", "numero": 1, "code": "MED-GEN"},
-    {"nombre": "Pediatría", "numero": 2, "code": "PED"},
-    {"nombre": "Ginecología y Obstetricia", "numero": 3, "code": "GINE"},
-    {"nombre": "Cardiología", "numero": 4, "code": "CARD"},
-    {"nombre": "Traumatología", "numero": 5, "code": "TRAUMA"},
+    {"nombre": "Medicina General", "numero": "1", "code": "MED-GEN"},
+    {"nombre": "Pediatría", "numero": "2", "code": "PED"},
+    {"nombre": "Ginecología y Obstetricia", "numero": "3", "code": "GINE"},
+    {"nombre": "Cardiología", "numero": "4", "code": "CARD"},
+    {"nombre": "Traumatología", "numero": "5", "code": "TRAUMA"},
 ]
 
 DOCTORES_INICIALES = [
-    {
-        "nombre": "Dra. María López",
-        "especialidades": ["Pediatría", "Medicina General"],
-    },
-    {
-        "nombre": "Dr. Carlos Ramírez",
-        "especialidades": ["Cardiología", "Medicina General"],
-    },
+    {"nombre": "Dra. María López"},
+    {"nombre": "Dr. Carlos Ramírez"},
 ]
 
 
@@ -47,18 +44,8 @@ def seed_doctores(db: Session) -> None:
         print("Doctores ya existen. Se omite el seed.")
         return
 
-    especialidades = {
-        esp.nombre: esp for esp in db.query(Especialidad).all()
-    }
-
     for data in DOCTORES_INICIALES:
-        doctor = Doctor(nombre=data["nombre"], estado="Activo")
-        doctor.especialidades = [
-            especialidades[nombre]
-            for nombre in data["especialidades"]
-            if nombre in especialidades
-        ]
-        db.add(doctor)
+        db.add(Doctor(nombre=data["nombre"], estado="Activo"))
 
     db.commit()
     print(f"Se insertaron {len(DOCTORES_INICIALES)} doctores.")

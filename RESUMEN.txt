@@ -81,9 +81,13 @@ Tablas principales:
   - horario
 
 Tablas intermedias (many-to-many):
-  - doctor_especialidad
   - promocion_especialidad
   - informe_especialidad
+  (V2) doctor_especialidad ELIMINADA — doctor↔especialidad vía horario
+
+Nuevas / cambios de esquema V2:
+  - horario: +fecha, +id_especialidad (FK especialidades)
+  - cierres_caja (nueva; modelo/schema listos, sin endpoints aún)
 
 Roles en users:
   - User (por defecto al registrarse vía trigger de Supabase)
@@ -107,10 +111,11 @@ Archivo: app/models/all_models.py
   [x] Doctor
   [x] Promocion
   [x] Informe
-  [x] Horario
-  [x] doctor_especialidad (Table)
+  [x] Horario (+ fecha, id_especialidad en V2)
+  [x] CierreCaja
   [x] promocion_especialidad (Table)
   [x] informe_especialidad (Table)
+  [ ] doctor_especialidad — eliminada en BD V2
 
 
 ------------------------------------------------------------------------------

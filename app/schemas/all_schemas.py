@@ -11,8 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 class EspecialidadBase(BaseModel):
     nombre: str = Field(..., max_length=100)
-    numero: Optional[str] = Field(None, max_length=100)
-    code: Optional[str] = Field(None, max_length=100)
+    numero: Optional[str] = None
+    code: Optional[str] = None
     estado: str = "Activo"
 
 
@@ -22,8 +22,8 @@ class EspecialidadCreate(EspecialidadBase):
 
 class EspecialidadUpdate(BaseModel):
     nombre: Optional[str] = Field(None, max_length=100)
-    numero: Optional[str] = Field(None, max_length=100)
-    code: Optional[str] = Field(None, max_length=100)
+    numero: Optional[str] = None
+    code: Optional[str] = None
     estado: Optional[str] = None
 
 
@@ -82,20 +82,18 @@ class DoctorBase(BaseModel):
 
 
 class DoctorCreate(DoctorBase):
-    especialidad_ids: list[int] = Field(default_factory=list)
+    pass
 
 
 class DoctorUpdate(BaseModel):
     nombre: Optional[str] = Field(None, max_length=100)
     estado: Optional[str] = None
-    especialidad_ids: Optional[list[int]] = None
 
 
 class DoctorResponse(DoctorBase):
     model_config = ConfigDict(from_attributes=True)
 
     id_doctor: int
-    especialidades: list[EspecialidadResponse] = Field(default_factory=list)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -178,6 +176,8 @@ class InformeResponse(InformeBase):
 
 class HorarioBase(BaseModel):
     id_doctor: Optional[int] = None
+    id_especialidad: Optional[int] = None
+    fecha: Optional[date] = None
     dia_semana: str = Field(..., max_length=50)
     hora_inicio: time
     hora_fin: time
@@ -198,6 +198,8 @@ class HorarioCreate(HorarioBase):
 
 class HorarioUpdate(BaseModel):
     id_doctor: Optional[int] = None
+    id_especialidad: Optional[int] = None
+    fecha: Optional[date] = None
     dia_semana: Optional[str] = Field(None, max_length=50)
     hora_inicio: Optional[time] = None
     hora_fin: Optional[time] = None
@@ -210,3 +212,36 @@ class HorarioResponse(HorarioBase):
     id_horario: int
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+
+
+# ---------------------------------------------------------------------------
+# Cierres de caja (modelo alineado a BD; endpoints después si se requieren)
+# ---------------------------------------------------------------------------
+
+class CierreCajaBase(BaseModel):
+    nombre_cajero: str = Field(..., max_length=150)
+    area_cajero: Optional[str] = Field(None, max_length=100)
+    id_admin_registro: Optional[int] = None
+    fecha_cierre: date
+    efectivo: Optional[float] = 0
+    pos: Optional[float] = 0
+    yape: Optional[float] = 0
+    transferencia: Optional[float] = 0
+    deposito: Optional[float] = 0
+    devolucion_monto: Optional[float] = 0
+    devolucion_tipo: Optional[str] = Field(None, max_length=50)
+    devolucion_afecta: Optional[str] = Field(None, max_length=50)
+    total_neto: float
+    pdf_informe_url: Optional[str] = None
+    estado: Optional[str] = Field("Completado", max_length=50)
+
+
+class CierreCajaCreate(CierreCajaBase):
+    pass
+
+
+class CierreCajaResponse(CierreCajaBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id_cierre: int
+    created_at: Optional[datetime] = None

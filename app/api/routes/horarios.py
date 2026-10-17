@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import get_current_admin_user
 from app.db.database import get_db
-from app.models.all_models import Doctor, Horario, User
+from app.models.all_models import Doctor, Especialidad, Horario, User
 from app.schemas.all_schemas import HorarioCreate, HorarioResponse, HorarioUpdate
 
 router = APIRouter(prefix="/horarios", tags=["Horarios"])
@@ -29,6 +29,21 @@ def _validar_doctor(db: Session, id_doctor: Optional[int]) -> None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Doctor con id {id_doctor} no existe",
+        )
+
+
+def _validar_especialidad(db: Session, id_especialidad: Optional[int]) -> None:
+    if id_especialidad is None:
+        return
+    especialidad = (
+        db.query(Especialidad)
+        .filter(Especialidad.id_especialidad == id_especialidad)
+        .first()
+    )
+    if not especialidad:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Especialidad con id {id_especialidad} no existe",
         )
 
 
@@ -66,14 +81,17 @@ def _validar_cruce_horarios(
 @router.get("/", response_model=list[HorarioResponse])
 def listar_horarios(
     id_doctor: Optional[int] = Query(None),
+    id_especialidad: Optional[int] = Query(None),
     estado: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ) -> list[Horario]:
-    """Público: lista horarios con filtros opcionales."""
+    """Público: lista horarios con filtros opcionales (campos V2 incluidos en response)."""
     query = db.query(Horario)
 
     if id_doctor is not None:
         query = query.filter(Horario.id_doctor == id_doctor)
+    if id_especialidad is not None:
+        query = query.filter(Horario.id_especialidad == id_especialidad)
     if estado:
         query = query.filter(Horario.estado == estado)
 
@@ -92,8 +110,9 @@ def crear_horario(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_admin_user),
 ) -> Horario:
-    """Admin: crea un horario."""
+    """Admin: crea un horario (campos V2: fecha, id_especialidad aceptados)."""
     _validar_doctor(db, payload.id_doctor)
+    _validar_especialidad(db, payload.id_especialidad)
     _validar_cruce_horarios(
         db,
         payload.id_doctor,
@@ -130,6 +149,8 @@ def actualizar_horario(
 
     if "id_doctor" in data:
         _validar_doctor(db, data["id_doctor"])
+    if "id_especialidad" in data:
+        _validar_especialidad(db, data["id_especialidad"])
 
     hora_inicio = data.get("hora_inicio", horario.hora_inicio)
     hora_fin = data.get("hora_fin", horario.hora_fin)

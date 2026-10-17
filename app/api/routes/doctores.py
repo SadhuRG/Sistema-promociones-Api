@@ -1,24 +1,18 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
-from app.api.routes.helpers import get_especialidades_by_ids
 from app.core.security import get_current_admin_user
 from app.db.database import get_db
-from app.models.all_models import Doctor, User, doctor_especialidad
+from app.models.all_models import Doctor, Horario, User
 from app.schemas.all_schemas import DoctorCreate, DoctorResponse, DoctorUpdate
 
 router = APIRouter(prefix="/doctores", tags=["Doctores"])
 
 
 def _get_doctor_or_404(db: Session, id_doctor: int) -> Doctor:
-    doctor = (
-        db.query(Doctor)
-        .options(joinedload(Doctor.especialidades))
-        .filter(Doctor.id_doctor == id_doctor)
-        .first()
-    )
+    doctor = db.query(Doctor).filter(Doctor.id_doctor == id_doctor).first()
     if not doctor:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -30,19 +24,23 @@ def _get_doctor_or_404(db: Session, id_doctor: int) -> Doctor:
 @router.get("/", response_model=list[DoctorResponse])
 def listar_doctores(
     estado: Optional[str] = Query(None),
-    especialidad_id: Optional[int] = Query(None),
+    especialidad_id: Optional[int] = Query(
+        None,
+        description="Filtra doctores que tengan al menos un horario con esa especialidad",
+    ),
     db: Session = Depends(get_db),
 ) -> list[Doctor]:
-    """Público: lista doctores con sus especialidades. Usa ?estado=Activo para selectores."""
-    query = db.query(Doctor).options(joinedload(Doctor.especialidades))
+    """Público: lista doctores. En V2 ya no existe doctor_especialidad."""
+    query = db.query(Doctor)
 
     if estado:
         query = query.filter(Doctor.estado == estado)
 
+    # Relación doctor↔especialidad ahora pasa por horario
     if especialidad_id is not None:
         query = (
-            query.join(doctor_especialidad)
-            .filter(doctor_especialidad.c.id_especialidad == especialidad_id)
+            query.join(Horario, Horario.id_doctor == Doctor.id_doctor)
+            .filter(Horario.id_especialidad == especialidad_id)
             .distinct()
         )
 
@@ -61,11 +59,8 @@ def crear_doctor(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_admin_user),
 ) -> Doctor:
-    """Admin: crea un doctor y relaciona especialidades."""
-    especialidades = get_especialidades_by_ids(db, payload.especialidad_ids)
+    """Admin: crea un doctor."""
     doctor = Doctor(nombre=payload.nombre, estado=payload.estado)
-    doctor.especialidades = especialidades
-
     db.add(doctor)
     try:
         db.commit()
@@ -76,7 +71,8 @@ def crear_doctor(
             detail=f"No se pudo crear el doctor: {exc}",
         ) from exc
 
-    return _get_doctor_or_404(db, doctor.id_doctor)
+    db.refresh(doctor)
+    return doctor
 
 
 @router.put("/{id_doctor}", response_model=DoctorResponse)
@@ -86,16 +82,12 @@ def actualizar_doctor(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_admin_user),
 ) -> Doctor:
-    """Admin: actualiza doctor y sincroniza especialidades si se envían."""
+    """Admin: actualiza nombre/estado del doctor."""
     doctor = _get_doctor_or_404(db, id_doctor)
     data = payload.model_dump(exclude_unset=True)
 
-    if "nombre" in data:
-        doctor.nombre = data["nombre"]
-    if "estado" in data:
-        doctor.estado = data["estado"]
-    if "especialidad_ids" in data and data["especialidad_ids"] is not None:
-        doctor.especialidades = get_especialidades_by_ids(db, data["especialidad_ids"])
+    for campo, valor in data.items():
+        setattr(doctor, campo, valor)
 
     try:
         db.commit()
@@ -106,7 +98,8 @@ def actualizar_doctor(
             detail=f"No se pudo actualizar el doctor: {exc}",
         ) from exc
 
-    return _get_doctor_or_404(db, id_doctor)
+    db.refresh(doctor)
+    return doctor
 
 
 @router.delete("/{id_doctor}", status_code=status.HTTP_204_NO_CONTENT)
@@ -116,13 +109,7 @@ def eliminar_doctor(
     _: User = Depends(get_current_admin_user),
 ) -> None:
     """Admin: elimina un doctor."""
-    doctor = db.query(Doctor).filter(Doctor.id_doctor == id_doctor).first()
-    if not doctor:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Doctor no encontrado",
-        )
-
+    doctor = _get_doctor_or_404(db, id_doctor)
     db.delete(doctor)
     try:
         db.commit()
