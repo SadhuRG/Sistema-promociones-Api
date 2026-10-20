@@ -36,3 +36,4 @@ htmlcov/
 # Local misc
 *.log
 .railway/
+data/tmp/

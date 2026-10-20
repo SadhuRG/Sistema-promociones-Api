@@ -214,6 +214,19 @@ class HorarioResponse(HorarioBase):
     updated_at: Optional[datetime] = None
 
 
+class HorarioSyncAutoRequest(BaseModel):
+    """Fechas en formato Imagina: DD/MM/YYYY."""
+
+    fecha_inicio: str = Field(..., examples=["01/10/2026"])
+    fecha_fin: str = Field(..., examples=["30/11/2026"])
+
+
+class HorarioSyncAutoResponse(BaseModel):
+    status: str
+    message: str
+    registros_insertados: Optional[int] = None
+
+
 # ---------------------------------------------------------------------------
 # Cierres de caja (modelo alineado a BD; endpoints después si se requieren)
 # ---------------------------------------------------------------------------

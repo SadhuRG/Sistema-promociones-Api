@@ -16,6 +16,13 @@ class Settings(BaseSettings):
     # CORS_ORIGINS=http://localhost:5173,https://tu-frontend.vercel.app
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173"
 
+    # Imagina / Intranet (sync horarios Excel) — opcionales en fase de prueba
+    IMAGINA_URL_LOGIN: str = "https://intranet.romavitalsalud.com/login.php"
+    IMAGINA_ITEC_URL: str = "https://intranet.romavitalsalud.com/controlador/core/Itec.php"
+    IMAGINA_USUARIO: str = ""
+    IMAGINA_PASSWORD: str = ""
+    IMAGINA_EXCEL_URL: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

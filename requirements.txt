@@ -15,3 +15,8 @@ alembic==1.16.5
 pyjwt[crypto]==2.12.0
 cryptography==50.0.0
 supabase==2.31.0
+
+# --- Sync Imagina (Excel en memoria) ---
+requests==2.32.5
+pandas==2.3.3
+openpyxl==3.1.5
