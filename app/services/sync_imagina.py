@@ -12,6 +12,21 @@ from app.services.limpieza_horarios import excel_bytes_a_registros
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
+def _normalizar_etag(etag: Optional[str]) -> Optional[str]:
+    """
+    Comparación débil RFC 7232: W/"abc" y "abc" son equivalentes.
+    Imagina suele devolver W/"..." en HEAD y "..." en GET.
+    """
+    if etag is None:
+        return None
+    valor = etag.strip()
+    if valor.startswith("W/"):
+        valor = valor[2:].strip()
+    if len(valor) >= 2 and valor[0] == '"' and valor[-1] == '"':
+        valor = valor[1:-1]
+    return valor or None
+
+
 class ImaginaSyncService:
     """
     Solo descarga el Excel de Imagina (RAM).
@@ -42,6 +57,23 @@ class ImaginaSyncService:
         self._last_etag: Optional[str] = None
         self._last_modified: Optional[str] = None
         self._sid: Optional[str] = None
+
+    @property
+    def last_etag(self) -> Optional[str]:
+        return self._last_etag
+
+    @property
+    def last_modified(self) -> Optional[str]:
+        return self._last_modified
+
+    def cargar_estado_etag(
+        self,
+        etag: Optional[str] = None,
+        last_modified: Optional[str] = None,
+    ) -> None:
+        """Restaura el último ETag conocido (caché en memoria de proceso)."""
+        self._last_etag = etag
+        self._last_modified = last_modified
 
     def login(self) -> bool:
         """Login silencioso; conserva cookies y extrae param_sid Imagina."""
@@ -169,8 +201,12 @@ class ImaginaSyncService:
             resultado["etag"] = etag
             resultado["last_modified"] = last_modified
 
+            etag_actual = _normalizar_etag(etag)
+            etag_previo = _normalizar_etag(self._last_etag)
             mismo_etag = (
-                self._last_etag is not None and etag is not None and self._last_etag == etag
+                etag_previo is not None
+                and etag_actual is not None
+                and etag_previo == etag_actual
             )
             mismo_lm = (
                 self._last_modified is not None
@@ -178,7 +214,7 @@ class ImaginaSyncService:
                 and self._last_modified == last_modified
             )
 
-            if mismo_etag or (etag is None and mismo_lm):
+            if mismo_etag or (etag_actual is None and mismo_lm):
                 resultado["hay_cambios"] = False
                 print("[INFO] Sin cambios detectados (ETag/Last-Modified iguales).")
             else:

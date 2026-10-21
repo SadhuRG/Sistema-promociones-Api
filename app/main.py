@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -11,11 +13,23 @@ from app.api.routes import (
     usuarios,
 )
 from app.core.config import settings
+from app.core.scheduler import start_scheduler, stop_scheduler
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    start_scheduler()
+    try:
+        yield
+    finally:
+        stop_scheduler()
+
 
 app = FastAPI(
     title="API Roma Salud",
     description="Backend para el sistema de promociones y horarios de la clínica",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

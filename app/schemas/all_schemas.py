@@ -215,13 +215,23 @@ class HorarioResponse(HorarioBase):
 
 
 class HorarioSyncAutoRequest(BaseModel):
-    """Fechas en formato Imagina: DD/MM/YYYY."""
+    """
+    Fechas en formato Imagina: DD/MM/YYYY.
+    Si se omiten, se usa el mes calendario actual.
+    """
 
-    fecha_inicio: str = Field(..., examples=["01/10/2026"])
-    fecha_fin: str = Field(..., examples=["30/11/2026"])
+    fecha_inicio: Optional[str] = Field(None, examples=["01/10/2026"])
+    fecha_fin: Optional[str] = Field(None, examples=["31/10/2026"])
 
 
 class HorarioSyncAutoResponse(BaseModel):
+    """
+    status:
+      - success: mirror aplicado
+      - up_to_date: sin cambios reales en Imagina
+      - busy: ya hay un sync en curso (admin o scheduler)
+    """
+
     status: str
     message: str
     registros_insertados: Optional[int] = None

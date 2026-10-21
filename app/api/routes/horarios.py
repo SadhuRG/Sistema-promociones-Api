@@ -1,10 +1,8 @@
-from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.core.security import get_current_admin_user
 from app.db.database import get_db
 from app.models.all_models import Doctor, Especialidad, Horario, User
@@ -15,9 +13,7 @@ from app.schemas.all_schemas import (
     HorarioSyncAutoResponse,
     HorarioUpdate,
 )
-from app.services.db_horarios_sync import DBHorariosSyncService
-from app.services.procesador_horarios import ProcesadorHorariosService
-from app.services.sync_imagina import ImaginaSyncService
+from app.services.orquestador_horarios import ejecutar_sync_horarios
 
 router = APIRouter(prefix="/horarios", tags=["Horarios"])
 
@@ -96,7 +92,11 @@ def listar_horarios(
     estado: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ) -> list[Horario]:
-    """Público: lista horarios con filtros opcionales (campos V2 incluidos en response)."""
+    """
+    Público: lee horarios solo desde BD (sin Imagina).
+    Pensado para el botón "Sincronizar" de usuario: refresca la vista
+    con lo que ya actualizó el scheduler o el admin.
+    """
     query = db.query(Horario)
 
     if id_doctor is not None:
@@ -109,100 +109,45 @@ def listar_horarios(
     return query.order_by(Horario.id_horario.desc()).all()
 
 
-def _dd_mm_yyyy_a_sql(fecha: str) -> str:
-    """DD/MM/YYYY -> YYYY-MM-DD."""
-    try:
-        return datetime.strptime(fecha.strip(), "%d/%m/%Y").strftime("%Y-%m-%d")
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Fecha inválida '{fecha}'. Usa DD/MM/YYYY.",
-        ) from exc
-
-
 @router.post("/sync-auto", response_model=HorarioSyncAutoResponse)
 def sync_auto_horarios(
-    payload: HorarioSyncAutoRequest,
+    payload: HorarioSyncAutoRequest = HorarioSyncAutoRequest(),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_admin_user),
 ) -> HorarioSyncAutoResponse:
     """
-    Admin: sincronización por espejo desde Imagina.
-    login -> preparar_reporte -> verificar_cambios -> descargar -> procesar -> DELETE+INSERT.
-    """
-    url = settings.IMAGINA_EXCEL_URL
-    if not url:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="IMAGINA_EXCEL_URL no está configurada",
-        )
+    Solo Admin: sync completo Imagina -> BD (mismo flujo que el job cada 2 min).
 
-    fecha_inicio_sql = _dd_mm_yyyy_a_sql(payload.fecha_inicio)
-    fecha_fin_sql = _dd_mm_yyyy_a_sql(payload.fecha_fin)
-    if fecha_fin_sql < fecha_inicio_sql:
+    Respuestas:
+    - busy: ya hay un sync en curso (scheduler u otro admin); no relanza.
+    - up_to_date: Imagina sin cambios reales.
+    - success: mirror aplicado ("Horarios actualizados correctamente").
+
+    Fechas opcionales (DD/MM/YYYY); por defecto mes actual.
+    """
+    try:
+        resultado = ejecutar_sync_horarios(
+            db=db,
+            fecha_inicio=payload.fecha_inicio,
+            fecha_fin=payload.fecha_fin,
+        )
+    except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="fecha_fin debe ser posterior o igual a fecha_inicio",
-        )
-
-    imagina = ImaginaSyncService()
-
-    if not imagina.login():
+            detail=str(exc),
+        ) from exc
+    except RuntimeError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="No se pudo iniciar sesión en Imagina",
-        )
-
-    if not imagina.preparar_reporte(payload.fecha_inicio, payload.fecha_fin):
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="No se pudo preparar el reporte de horarios en Imagina",
-        )
-
-    meta = imagina.verificar_cambios(url)
-    if meta.get("error"):
-        # Si HEAD falla, continuamos con descarga (misma política que el servicio)
-        pass
-    elif not meta.get("hay_cambios", True):
-        return HorarioSyncAutoResponse(
-            status="up_to_date",
-            message="Los horarios ya están actualizados",
-            registros_insertados=0,
-        )
-
-    datos_excel = imagina.descargar_excel(url)
-    if datos_excel is None:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Falló la descarga/limpieza del Excel de Imagina",
-        )
-
-    try:
-        datos_procesados = ProcesadorHorariosService().procesar(datos_excel, db)
+            detail=str(exc),
+        ) from exc
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al procesar horarios: {exc}",
+            detail=f"Error en sincronización: {exc}",
         ) from exc
 
-    try:
-        insertados = DBHorariosSyncService().sincronizar_en_bd(
-            datos_procesados=datos_procesados,
-            db_session=db,
-            fecha_inicio_sql=fecha_inicio_sql,
-            fecha_fin_sql=fecha_fin_sql,
-        )
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al sincronizar en base de datos: {exc}",
-        ) from exc
-
-    return HorarioSyncAutoResponse(
-        status="success",
-        message="Sincronización completa",
-        registros_insertados=insertados,
-    )
+    return HorarioSyncAutoResponse(**resultado)
 
 
 @router.get("/{id_horario}", response_model=HorarioResponse)
