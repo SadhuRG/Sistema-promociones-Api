@@ -146,6 +146,7 @@ class PromocionResponse(PromocionBase):
 
 class InformeBase(BaseModel):
     titulo: str = Field(..., max_length=200)
+    estado: bool = Field(default=True)
     descripcion: Optional[str] = None
     informe_img: Optional[str] = None
 
@@ -156,6 +157,7 @@ class InformeCreate(InformeBase):
 
 class InformeUpdate(BaseModel):
     titulo: Optional[str] = Field(None, max_length=200)
+    estado: Optional[bool] = None
     descripcion: Optional[str] = None
     informe_img: Optional[str] = None
     especialidad_ids: Optional[list[int]] = None

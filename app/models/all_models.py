@@ -9,6 +9,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    Boolean,
     Time,
     func,
 )
@@ -155,6 +156,7 @@ class Informe(Base):
     id_informe = Column(BigInteger, primary_key=True, autoincrement=True)
     titulo = Column(String(200), nullable=False)
     descripcion = Column(Text, nullable=True)
+    estado = Column(Boolean, default=True, nullable=False)
     informe_img = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now())

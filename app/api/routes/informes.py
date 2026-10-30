@@ -32,11 +32,16 @@ def _get_informe_or_404(db: Session, id_informe: int) -> Informe:
 def listar_informes(
     especialidad_id: Optional[int] = Query(None),
     titulo: Optional[str] = Query(None, description="Busca en el título (ILIKE)"),
+    estado: Optional[bool] = Query(
+        True,
+        description="Filtra por estado. Default true (solo activos). Usa false para inactivos.",
+    ),
     db: Session = Depends(get_db),
 ) -> list[Informe]:
     """Público: lista informes con especialidades."""
     query = db.query(Informe).options(joinedload(Informe.especialidades))
-
+    if estado is not None:
+        query = query.filter(Informe.estado == estado)
     if titulo:
         query = query.filter(Informe.titulo.ilike(f"%{titulo}%"))
 
@@ -62,6 +67,7 @@ async def crear_informe(
     descripcion: Optional[str] = Form(None),
     especialidad_ids: Optional[str] = Form(None),
     imagen: Optional[UploadFile] = File(None),
+    estado: Optional[bool] = Form(True),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_admin_user),
 ) -> Informe:
@@ -77,6 +83,7 @@ async def crear_informe(
         titulo=titulo,
         descripcion=descripcion,
         informe_img=imagen_url,
+        estado=estado,
     )
     informe.especialidades = especialidades
 
@@ -100,6 +107,7 @@ async def actualizar_informe(
     descripcion: Optional[str] = Form(None),
     especialidad_ids: Optional[str] = Form(None),
     imagen: Optional[UploadFile] = File(None),
+    estado: Optional[bool] = Form(None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_admin_user),
 ) -> Informe:
@@ -110,7 +118,8 @@ async def actualizar_informe(
         informe.titulo = titulo
     if descripcion is not None:
         informe.descripcion = descripcion
-
+    if estado is not None:
+        informe.estado = estado
     if imagen and imagen.filename:
         informe.informe_img = await upload_image_to_supabase(imagen, folder="informes")
 
