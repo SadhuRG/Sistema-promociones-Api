@@ -4,13 +4,17 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.routes.helpers import get_especialidades_by_ids, parse_especialidad_ids
-from app.core.security import get_current_admin_user
+from app.core.security import get_current_admin_user, get_optional_user
 from app.core.storage import upload_image_to_supabase
 from app.db.database import get_db
 from app.models.all_models import Informe, User, informe_especialidad
-from app.schemas.all_schemas import InformeResponse
+from app.schemas.all_schemas import InformeEstadoUpdate, InformeResponse
 
 router = APIRouter(prefix="/informes", tags=["Informes"])
+
+
+def _is_admin(user: Optional[User]) -> bool:
+    return bool(user and user.rol == "Admin")
 
 
 def _get_informe_or_404(db: Session, id_informe: int) -> Informe:
@@ -33,15 +37,24 @@ def listar_informes(
     especialidad_id: Optional[int] = Query(None),
     titulo: Optional[str] = Query(None, description="Busca en el título (ILIKE)"),
     estado: Optional[bool] = Query(
-        True,
-        description="Filtra por estado. Default true (solo activos). Usa false para inactivos.",
+        None,
+        description=(
+            "Filtra por estado booleano. El público y los usuarios solo ven activos. "
+            "Un Admin sin este parámetro recibe todos."
+        ),
     ),
     db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
 ) -> list[Informe]:
-    """Público: lista informes con especialidades."""
+    """Lista informes. Usuarios: solo activos. Admin: todos, salvo que envíe ?estado=."""
     query = db.query(Informe).options(joinedload(Informe.especialidades))
-    if estado is not None:
-        query = query.filter(Informe.estado == estado)
+
+    if _is_admin(current_user):
+        if estado is not None:
+            query = query.filter(Informe.estado.is_(estado))
+    else:
+        query = query.filter(Informe.estado.is_(True))
+
     if titulo:
         query = query.filter(Informe.titulo.ilike(f"%{titulo}%"))
 
@@ -56,9 +69,19 @@ def listar_informes(
 
 
 @router.get("/{id_informe}", response_model=InformeResponse)
-def obtener_informe(id_informe: int, db: Session = Depends(get_db)) -> Informe:
-    """Público: obtiene un informe por ID."""
-    return _get_informe_or_404(db, id_informe)
+def obtener_informe(
+    id_informe: int,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
+) -> Informe:
+    """Público/usuario: solo si está activo. Admin: cualquiera."""
+    informe = _get_informe_or_404(db, id_informe)
+    if not _is_admin(current_user) and not informe.estado:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Informe no encontrado",
+        )
+    return informe
 
 
 @router.post("/", response_model=InformeResponse, status_code=status.HTTP_201_CREATED)
@@ -83,7 +106,7 @@ async def crear_informe(
         titulo=titulo,
         descripcion=descripcion,
         informe_img=imagen_url,
-        estado=estado,
+        estado=True if estado is None else estado,
     )
     informe.especialidades = especialidades
 
@@ -100,6 +123,29 @@ async def crear_informe(
     return _get_informe_or_404(db, informe.id_informe)
 
 
+@router.put("/{id_informe}/estado", response_model=InformeResponse)
+def actualizar_estado_informe(
+    id_informe: int,
+    payload: InformeEstadoUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_admin_user),
+) -> Informe:
+    """Admin: activa o desactiva un informe."""
+    informe = _get_informe_or_404(db, id_informe)
+    informe.estado = payload.estado
+
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No se pudo actualizar el estado: {exc}",
+        ) from exc
+
+    return _get_informe_or_404(db, id_informe)
+
+
 @router.put("/{id_informe}", response_model=InformeResponse)
 async def actualizar_informe(
     id_informe: int,
@@ -111,7 +157,7 @@ async def actualizar_informe(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_admin_user),
 ) -> Informe:
-    """Admin: actualiza informe, imagen y especialidades."""
+    """Admin: actualiza informe, imagen, especialidades y estado."""
     informe = _get_informe_or_404(db, id_informe)
 
     if titulo is not None:

@@ -1,3 +1,4 @@
+from typing import Optional
 from uuid import UUID
 
 import jwt
@@ -11,6 +12,7 @@ from app.db.database import get_db
 from app.models.all_models import User
 
 security_scheme = HTTPBearer(auto_error=True)
+optional_security_scheme = HTTPBearer(auto_error=False)
 
 _jwks_client = PyJWKClient(settings.SUPABASE_JWKS_URL)
 
@@ -41,12 +43,8 @@ def _decode_supabase_token(token: str) -> dict:
         ) from exc
 
 
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
-    db: Session = Depends(get_db),
-) -> User:
-    """Valida el JWT y retorna el usuario local vinculado a Supabase Auth."""
-    payload = _decode_supabase_token(credentials.credentials)
+def _load_user_from_token(token: str, db: Session) -> User:
+    payload = _decode_supabase_token(token)
     sub = payload.get("sub")
     if not sub:
         raise HTTPException(
@@ -78,6 +76,27 @@ def get_current_user(
             detail="Usuario inactivo",
         )
     return user
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
+    db: Session = Depends(get_db),
+) -> User:
+    """Valida el JWT y retorna el usuario local vinculado a Supabase Auth."""
+    return _load_user_from_token(credentials.credentials, db)
+
+
+def get_optional_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security_scheme),
+    db: Session = Depends(get_db),
+) -> Optional[User]:
+    """Igual que get_current_user, pero sin token (o token inválido) retorna None."""
+    if not credentials or not credentials.credentials:
+        return None
+    try:
+        return _load_user_from_token(credentials.credentials, db)
+    except HTTPException:
+        return None
 
 
 def get_current_admin_user(

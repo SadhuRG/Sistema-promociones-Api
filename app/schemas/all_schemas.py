@@ -163,6 +163,10 @@ class InformeUpdate(BaseModel):
     especialidad_ids: Optional[list[int]] = None
 
 
+class InformeEstadoUpdate(BaseModel):
+    estado: bool
+
+
 class InformeResponse(InformeBase):
     model_config = ConfigDict(from_attributes=True)
 
