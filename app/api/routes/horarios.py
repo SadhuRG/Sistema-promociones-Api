@@ -116,7 +116,7 @@ def sync_auto_horarios(
     _: User = Depends(get_current_admin_user),
 ) -> HorarioSyncAutoResponse:
     """
-    Solo Admin: sync completo Imagina -> BD (mismo flujo que el job cada 2 min).
+    Solo Admin: sync completo Imagina -> BD (mismo flujo que el job cada 1 min).
 
     Respuestas:
     - busy: ya hay un sync en curso (scheduler u otro admin); no relanza.

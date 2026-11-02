@@ -1,5 +1,5 @@
 """
-Scheduler en background: sync de horarios cada 2 minutos (mes actual).
+Scheduler en background: sync de horarios cada 1 minuto (mes actual).
 Respeta ETag vía orquestador_horarios (sin trabajo si no hay cambios).
 """
 
@@ -60,14 +60,14 @@ def start_scheduler() -> None:
     scheduler.add_job(
         job_sync_horarios_mes_actual,
         trigger="interval",
-        minutes=2,
+        minutes=1,
         id="sync_horarios_mes_actual",
         replace_existing=True,
         max_instances=1,
         coalesce=True,
     )
     scheduler.start()
-    logger.info("APScheduler iniciado: sync_horarios cada 2 minutos")
+    logger.info("APScheduler iniciado: sync_horarios cada 1 minuto")
 
 
 def stop_scheduler() -> None:

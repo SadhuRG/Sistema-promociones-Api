@@ -21,7 +21,7 @@ from app.services.etag_cache import guardar_estado, obtener_estado
 from app.services.procesador_horarios import ProcesadorHorariosService
 from app.services.sync_imagina import ImaginaSyncService
 
-# Candado de proceso: evita sync paralelo (botón admin + job cada 2 min).
+# Candado de proceso: evita sync paralelo (botón admin + job cada 1 min).
 _SYNC_LOCK = threading.Lock()
 _SYNC_EN_CURSO = False
 
