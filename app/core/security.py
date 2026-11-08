@@ -1,8 +1,9 @@
+import hmac
 from typing import Optional
 from uuid import UUID
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import PyJWKClient
 from sqlalchemy.orm import Session
@@ -121,3 +122,21 @@ def get_current_superadmin_user(
             detail="Se requieren permisos de SuperAdmin",
         )
     return current_user
+
+
+def verify_finance_pin(
+    x_finance_pin: Optional[str] = Header(default=None, alias="X-Finance-Pin"),
+) -> None:
+    """Exige el PIN financiero en el header X-Finance-Pin."""
+    expected = str(settings.FINANCE_ACCESS_PIN or "").strip()
+    received = str(x_finance_pin or "").strip()
+    if (
+        not expected
+        or not received
+        or len(expected) != len(received)
+        or not hmac.compare_digest(received, expected)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="PIN financiero incorrecto",
+        )

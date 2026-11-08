@@ -26,6 +26,8 @@ class Settings(BaseSettings):
         "https://intranet.romavitalsalud.com/util/formatos/reporte_cierre_caja.xlsx"
     )
 
+    FINANCE_ACCESS_PIN: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
