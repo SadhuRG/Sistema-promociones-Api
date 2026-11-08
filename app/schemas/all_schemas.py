@@ -63,12 +63,12 @@ class UserResponse(UserBase):
 
 
 class UserRolUpdate(BaseModel):
-    rol: str = Field(..., pattern="^(Admin|User|Marketing)$")
+    rol: str = Field(..., pattern="^(Admin|User|Marketing|SuperAdmin)$")
 
 
 class UserUpdate(BaseModel):
     nombre_usuario: Optional[str] = Field(None, max_length=100)
-    rol: Optional[str] = Field(None, pattern="^(Admin|User|Marketing)$")
+    rol: Optional[str] = Field(None, pattern="^(Admin|User|Marketing|SuperAdmin)$")
     estado: Optional[str] = Field(None, pattern="^(Activo|Inactivo)$")
 
 

@@ -14,7 +14,7 @@ router = APIRouter(prefix="/informes", tags=["Informes"])
 
 
 def _is_admin(user: Optional[User]) -> bool:
-    return bool(user and user.rol == "Admin")
+    return bool(user and user.rol in ("Admin", "SuperAdmin"))
 
 
 def _get_informe_or_404(db: Session, id_informe: int) -> Informe:

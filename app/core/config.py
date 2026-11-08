@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     IMAGINA_USUARIO: str = ""
     IMAGINA_PASSWORD: str = ""
     IMAGINA_EXCEL_URL: str = ""
+    IMAGINA_CIERRE_EXCEL_URL: str = (
+        "https://intranet.romavitalsalud.com/util/formatos/reporte_cierre_caja.xlsx"
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",

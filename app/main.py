@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
     auth,
+    cierres,
     doctores,
     especialidades,
     horarios,
@@ -49,6 +50,7 @@ app.include_router(promociones.router, prefix=API_PREFIX)
 app.include_router(horarios.router, prefix=API_PREFIX)
 app.include_router(informes.router, prefix=API_PREFIX)
 app.include_router(usuarios.router, prefix=API_PREFIX)
+app.include_router(cierres.router, prefix=API_PREFIX)
 
 
 @app.get("/")

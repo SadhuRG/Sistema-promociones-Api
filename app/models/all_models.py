@@ -105,7 +105,10 @@ class User(Base):
     cierres_caja = relationship("CierreCaja", back_populates="admin_registro")
 
     __table_args__ = (
-        CheckConstraint("rol IN ('User', 'Admin', 'Marketing')", name="chk_user_rol"),
+        CheckConstraint(
+            "rol IN ('User', 'Admin', 'Marketing', 'SuperAdmin')",
+            name="chk_user_rol",
+        ),
         CheckConstraint("estado IN ('Activo', 'Inactivo')", name="chk_user_estado"),
     )
 

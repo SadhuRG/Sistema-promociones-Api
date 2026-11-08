@@ -102,10 +102,22 @@ def get_optional_user(
 def get_current_admin_user(
     current_user: User = Depends(get_current_user),
 ) -> User:
-    """Exige que el usuario autenticado tenga rol Admin."""
-    if current_user.rol != "Admin":
+    """Exige rol Admin o SuperAdmin (el SuperAdmin hereda el panel administrativo)."""
+    if current_user.rol not in ("Admin", "SuperAdmin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Se requieren permisos de administrador",
+        )
+    return current_user
+
+
+def get_current_superadmin_user(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """Exige que el usuario autenticado tenga rol SuperAdmin."""
+    if current_user.rol != "SuperAdmin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Se requieren permisos de SuperAdmin",
         )
     return current_user
