@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-# key: "DD/MM/YYYY|DD/MM/YYYY" -> {etag, last_modified, content_hash}
+# key: "DD/MM/YYYY|DD/MM/YYYY" -> {etag, last_modified, content_hash, catalog_hash}
 _ETAG_CACHE: dict[str, dict[str, Optional[str]]] = {}
 
 
@@ -25,6 +25,7 @@ def guardar_estado(
     etag: Optional[str],
     last_modified: Optional[str],
     content_hash: Optional[str] = None,
+    catalog_hash: Optional[str] = None,
 ) -> None:
     previo = _ETAG_CACHE.get(rango_key(fecha_inicio, fecha_fin), {})
     _ETAG_CACHE[rango_key(fecha_inicio, fecha_fin)] = {
@@ -33,4 +34,7 @@ def guardar_estado(
         "content_hash": content_hash
         if content_hash is not None
         else previo.get("content_hash"),
+        "catalog_hash": catalog_hash
+        if catalog_hash is not None
+        else previo.get("catalog_hash"),
     }

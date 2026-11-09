@@ -24,6 +24,7 @@ _TITULOS_MEDICO = {
     "DOCTORA",
     "MD",
 }
+_PARTICULAS_NOMBRE = {"DE", "DEL", "LA", "LAS", "LOS", "Y", "E", "DA", "DAS", "DO", "DOS"}
 NOMBRE_ANONIMO = "ANONIMO"
 
 
@@ -40,75 +41,8 @@ class ProcesadorHorariosService:
 
         df_excel = pd.DataFrame(datos_excel)
 
-        # ------------------------------------------------------------------
-        # Extracción de BD
-        # ------------------------------------------------------------------
-        especialidades = db_session.query(
-            Especialidad.id_especialidad,
-            Especialidad.nombre,
-        ).all()
-        doctores = db_session.query(
-            Doctor.id_doctor,
-            Doctor.nombre,
-        ).all()
-
-        df_especialidades = pd.DataFrame(
-            [{"id_especialidad": e.id_especialidad, "nombre": e.nombre} for e in especialidades]
-        )
-        df_doctores = pd.DataFrame(
-            [{"id_doctor": d.id_doctor, "nombre": d.nombre} for d in doctores]
-        )
-
-        # ------------------------------------------------------------------
-        # Cruce especialidades
-        # ------------------------------------------------------------------
-        if df_especialidades.empty:
-            df_excel["id_especialidad"] = None
-        else:
-            df_especialidades["nombre_std"] = df_especialidades["nombre"].apply(
-                estandarizar_texto
-            )
-            df_especialidades = (
-                df_especialidades.dropna(subset=["nombre_std"])
-                .drop_duplicates(subset=["nombre_std"], keep="first")
-            )
-            df_excel = pd.merge(
-                df_excel,
-                df_especialidades[["id_especialidad", "nombre_std"]],
-                left_on="Especialidad",
-                right_on="nombre_std",
-                how="left",
-            )
-            df_excel = df_excel.drop(columns=["nombre_std"], errors="ignore")
-
-        self._asignar_anonimo_especialidad(df_excel, db_session)
-
-        # ------------------------------------------------------------------
-        # Cruce doctores
-        # ------------------------------------------------------------------
-        if "Medico" in df_excel.columns:
-            df_excel["Medico"] = df_excel["Medico"].apply(self._normalizar_medico)
-
-        if df_doctores.empty:
-            df_excel["id_doctor"] = None
-        else:
-            df_doctores["nombre_std"] = df_doctores["nombre"].apply(
-                self._clave_nombre_medico
-            )
-            df_doctores = (
-                df_doctores.dropna(subset=["nombre_std"])
-                .drop_duplicates(subset=["nombre_std"], keep="first")
-            )
-            df_excel = pd.merge(
-                df_excel,
-                df_doctores[["id_doctor", "nombre_std"]],
-                left_on="Medico",
-                right_on="nombre_std",
-                how="left",
-            )
-            df_excel = df_excel.drop(columns=["nombre_std"], errors="ignore")
-
-        self._asignar_anonimo_doctor(df_excel, db_session)
+        self._asignar_ids_especialidad(df_excel, db_session)
+        self._asignar_ids_doctor(df_excel, db_session)
 
         # ------------------------------------------------------------------
         # Formateo final -> columnas del modelo horario
@@ -142,13 +76,27 @@ class ProcesadorHorariosService:
                     row[col] = int(row[col])
         return registros
 
-    def _asignar_anonimo_especialidad(
+    def _asignar_ids_especialidad(
         self,
         df_excel: pd.DataFrame,
         db_session: Session,
     ) -> None:
-        if "id_especialidad" not in df_excel.columns:
+        filas = db_session.query(Especialidad).all()
+        mapa: dict[str, int] = {}
+        for fila in filas:
+            if self._es_anonimo(fila.nombre):
+                continue
+            clave = estandarizar_texto(fila.nombre)
+            if clave and clave not in mapa:
+                mapa[clave] = int(fila.id_especialidad)
+
+        if "Especialidad" in df_excel.columns:
+            df_excel["id_especialidad"] = df_excel["Especialidad"].map(
+                lambda valor: mapa.get(estandarizar_texto(valor))
+            )
+        else:
             df_excel["id_especialidad"] = None
+
         sin_match = df_excel["id_especialidad"].isna()
         if not sin_match.any():
             return
@@ -157,20 +105,36 @@ class ProcesadorHorariosService:
         )
         df_excel.loc[sin_match, "id_especialidad"] = anonimo_id
 
-    def _asignar_anonimo_doctor(
+    def _asignar_ids_doctor(
         self,
         df_excel: pd.DataFrame,
         db_session: Session,
     ) -> None:
-        if "id_doctor" not in df_excel.columns:
+        filas = db_session.query(Doctor).all()
+        mapa: dict[str, int] = {}
+        for fila in filas:
+            if self._es_anonimo(fila.nombre):
+                continue
+            for clave in self._claves_nombre_medico(fila.nombre):
+                if clave not in mapa:
+                    mapa[clave] = int(fila.id_doctor)
+
+        if "Medico" in df_excel.columns:
+            df_excel["id_doctor"] = df_excel["Medico"].map(
+                lambda valor: self._resolver_id_medico(valor, mapa)
+            )
+        else:
             df_excel["id_doctor"] = None
+
         medico = (
             df_excel["Medico"]
             if "Medico" in df_excel.columns
             else pd.Series(pd.NA, index=df_excel.index)
         )
-        sin_match = df_excel["id_doctor"].isna() & medico.notna()
-        if not sin_match.any():
+        sin_match = df_excel["id_doctor"].isna() & medico.map(
+            self._tiene_nombre_medico
+        ).fillna(False).astype(bool)
+        if not bool(sin_match.any()):
             return
         anonimo_id = self._obtener_o_crear_anonimo(db_session, Doctor, "id_doctor")
         df_excel.loc[sin_match, "id_doctor"] = anonimo_id
@@ -191,32 +155,51 @@ class ProcesadorHorariosService:
         return int(getattr(nuevo, id_attr))
 
     @classmethod
-    def _normalizar_medico(cls, valor: Any) -> Optional[str]:
-        """Estandariza el nombre; '-- -- --' / solo titulos -> None."""
-        if pd.isna(valor):
-            return None
-        return cls._clave_nombre_medico(valor)
+    def _resolver_id_medico(cls, valor: Any, mapa: dict[str, int]) -> Optional[int]:
+        for clave in cls._claves_nombre_medico(valor):
+            if clave in mapa:
+                return mapa[clave]
+        return None
 
-    @staticmethod
-    def _clave_nombre_medico(valor: Any) -> Optional[str]:
+    @classmethod
+    def _tiene_nombre_medico(cls, valor: Any) -> bool:
+        return bool(cls._claves_nombre_medico(valor))
+
+    @classmethod
+    def _claves_nombre_medico(cls, valor: Any) -> list[str]:
         """
-        Clave estable para cruzar Excel vs catálogo:
-        mayúsculas, sin tildes, sin DR/DRA, tokens ordenados.
-        Así 'Paola Berenize Jauregui Rojas' coincide con
-        'JAUREGUI ROJAS PAOLA BERENIZE' o 'DRA. PAOLA BERENIZE JAUREGUI ROJAS'.
+        Varias claves para cruzar Excel vs catálogo:
+        texto exacto, tokens ordenados y sin partículas (DE/DEL/LA).
         """
+        if valor is None or (not isinstance(valor, str) and pd.isna(valor)):
+            return []
         texto = estandarizar_texto(valor)
         if texto is None:
-            return None
+            return []
         limpio = re.sub(r"[.,;:/\\-]+", " ", texto)
-        if _MEDICO_VACIO.match(limpio.replace(" ", "")) or not limpio.replace(" ", ""):
-            return None
+        limpio = re.sub(r"\s+", " ", limpio).strip()
+        if not limpio or _MEDICO_VACIO.match(limpio.replace(" ", "")):
+            return []
         if set(limpio.replace(" ", "")) <= {"-"}:
-            return None
+            return []
         tokens = [token for token in limpio.split() if token not in _TITULOS_MEDICO]
         if not tokens:
-            return None
-        return " ".join(sorted(tokens))
+            return []
+        claves = [limpio, " ".join(sorted(tokens))]
+        sin_particulas = [token for token in tokens if token not in _PARTICULAS_NOMBRE]
+        if sin_particulas:
+            claves.append(" ".join(sorted(sin_particulas)))
+        vistas: set[str] = set()
+        unicas: list[str] = []
+        for clave in claves:
+            if clave and clave not in vistas:
+                vistas.add(clave)
+                unicas.append(clave)
+        return unicas
+
+    @staticmethod
+    def _es_anonimo(nombre: Any) -> bool:
+        return estandarizar_texto(nombre) == NOMBRE_ANONIMO
 
     @staticmethod
     def _formatear_fecha(serie: pd.Series) -> pd.Series:

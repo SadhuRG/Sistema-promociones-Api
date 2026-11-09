@@ -16,8 +16,10 @@ from typing import Any, Optional
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.models.all_models import Doctor, Especialidad
 from app.services.db_horarios_sync import DBHorariosSyncService
 from app.services.etag_cache import guardar_estado, obtener_estado
+from app.services.limpieza_horarios import estandarizar_texto
 from app.services.procesador_horarios import ProcesadorHorariosService
 from app.services.sync_imagina import ImaginaSyncService
 
@@ -52,6 +54,26 @@ def dd_mm_yyyy_a_sql(fecha: str) -> str:
     return datetime.strptime(fecha.strip(), "%d/%m/%Y").strftime("%Y-%m-%d")
 
 
+def fingerprint_catalogo(db: Session) -> str:
+    """Huella de doctores y especialidades para recrucear si el catálogo cambió."""
+    especialidades = db.query(Especialidad.id_especialidad, Especialidad.nombre).all()
+    doctores = db.query(Doctor.id_doctor, Doctor.nombre).all()
+    payload = json.dumps(
+        {
+            "especialidades": sorted(
+                f"{fila.id_especialidad}|{estandarizar_texto(fila.nombre) or ''}"
+                for fila in especialidades
+            ),
+            "doctores": sorted(
+                f"{fila.id_doctor}|{estandarizar_texto(fila.nombre) or ''}"
+                for fila in doctores
+            ),
+        },
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def fingerprint_registros(registros: list[dict[str, Any]]) -> str:
     """
     Huella estable del Excel limpio.
@@ -73,8 +95,8 @@ def _ejecutar_sync_interno(
     """
     Flujo completo (ya dentro del candado):
       login -> preparar_reporte -> verificar_cambios (ETag)
-      si no hay cambios -> up_to_date (sin descarga / sin BD)
-      si hay cambios de ETag -> descargar; si content_hash igual -> up_to_date (sin BD)
+      si Excel igual Y catálogo igual -> up_to_date
+      si Excel igual pero hay doctor/especialidad nuevo -> descarga y recruce
       si content_hash distinto -> procesar -> mirror BD -> success
     """
     url = settings.IMAGINA_EXCEL_URL
@@ -86,9 +108,11 @@ def _ejecutar_sync_interno(
     if fecha_fin_sql < fecha_inicio_sql:
         raise ValueError("fecha_fin debe ser posterior o igual a fecha_inicio")
 
+    catalog_hash = fingerprint_catalogo(db)
     imagina = ImaginaSyncService()
     cached = obtener_estado(fecha_inicio, fecha_fin)
     imagina.cargar_estado_etag(cached.get("etag"), cached.get("last_modified"))
+    catalogo_cambio = cached.get("catalog_hash") != catalog_hash
 
     if not imagina.login():
         raise RuntimeError("No se pudo iniciar sesión en Imagina")
@@ -99,7 +123,7 @@ def _ejecutar_sync_interno(
     meta = imagina.verificar_cambios(url)
     if meta.get("error"):
         pass
-    elif meta.get("hay_cambios") is False:
+    elif meta.get("hay_cambios") is False and not catalogo_cambio:
         return {
             "status": "up_to_date",
             "message": "No hay cambios en Imagina",
@@ -113,14 +137,16 @@ def _ejecutar_sync_interno(
     content_hash = fingerprint_registros(datos_excel)
     etag_guardar = imagina.last_etag or meta.get("etag")
     lm_guardar = imagina.last_modified or meta.get("last_modified")
+    excel_igual = bool(cached.get("content_hash") and cached["content_hash"] == content_hash)
 
-    if cached.get("content_hash") and cached["content_hash"] == content_hash:
+    if excel_igual and not catalogo_cambio:
         guardar_estado(
             fecha_inicio,
             fecha_fin,
             etag_guardar,
             lm_guardar,
             content_hash,
+            catalog_hash,
         )
         return {
             "status": "up_to_date",
@@ -142,6 +168,7 @@ def _ejecutar_sync_interno(
         etag_guardar,
         lm_guardar,
         content_hash,
+        fingerprint_catalogo(db),
     )
 
     return {

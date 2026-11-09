@@ -6,10 +6,13 @@ Recibe bytes / BytesIO, genera DataFrame limpio y list[dict].
 from __future__ import annotations
 
 import io
+import re
 import unicodedata
 from typing import Any, Optional, Union
 
 import pandas as pd
+
+_ESPACIOS = re.compile(r"[\s\u00a0\u2000-\u200b\ufeff]+")
 
 COLUMNAS_REQUERIDAS = [
     "Especialidad",
@@ -22,12 +25,13 @@ COLUMNAS_REQUERIDAS = [
 
 
 def estandarizar_texto(texto: Any) -> Optional[str]:
-    """Mayúsculas, strip y sin tildes/diéresis. NaN -> None."""
-    if pd.isna(texto):
+    """Mayúsculas, sin tildes, espacios compactados (incluye NBSP de Excel). NaN -> None."""
+    if texto is None or pd.isna(texto):
         return None
-    valor = str(texto).strip().upper()
-    normalizado = unicodedata.normalize("NFKD", valor)
-    return "".join(c for c in normalizado if not unicodedata.combining(c))
+    valor = unicodedata.normalize("NFKD", str(texto))
+    valor = "".join(c for c in valor if not unicodedata.combining(c))
+    valor = _ESPACIOS.sub(" ", valor).strip().upper()
+    return valor or None
 
 
 # Alias interno (compatibilidad)
