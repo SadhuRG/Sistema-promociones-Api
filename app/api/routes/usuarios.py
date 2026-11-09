@@ -8,15 +8,22 @@ from app.schemas.all_schemas import UserResponse, UserRolUpdate, UserUpdate
 
 router = APIRouter(prefix="/usuarios", tags=["Usuarios"])
 
-SELF_ACTION_DETAIL = "No puedes modificar ni eliminar tu propio usuario administrador"
+SELF_DELETE_DETAIL = "No puedes eliminar tu propio usuario"
+SUPERADMIN_EDIT_DETAIL = "No puedes modificar a un SuperAdmin"
+SUPERADMIN_DELETE_DETAIL = "No puedes eliminar a un SuperAdmin"
+SUPERADMIN_ASSIGN_DETAIL = "No puedes asignar el rol SuperAdmin"
+ROLE_ESCALATION_DETAIL = "No puedes asignar un rol superior al tuyo"
+
+ROLE_RANK = {
+    "User": 1,
+    "Marketing": 1,
+    "Admin": 2,
+    "SuperAdmin": 3,
+}
 
 
-def _ensure_not_self(target_id: int, current_user: User) -> None:
-    if target_id == current_user.id_user:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=SELF_ACTION_DETAIL,
-        )
+def _rank(rol: str) -> int:
+    return ROLE_RANK.get(str(rol or ""), 0)
 
 
 def _get_usuario_or_404(db: Session, id_user: int) -> User:
@@ -27,6 +34,44 @@ def _get_usuario_or_404(db: Session, id_user: int) -> User:
             detail="Usuario no encontrado",
         )
     return usuario
+
+
+def _ensure_can_edit(actor: User, target: User) -> None:
+    if actor.id_user == target.id_user:
+        return
+    if target.rol == "SuperAdmin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=SUPERADMIN_EDIT_DETAIL,
+        )
+
+
+def _ensure_can_delete(actor: User, target: User) -> None:
+    if actor.id_user == target.id_user:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=SELF_DELETE_DETAIL,
+        )
+    if target.rol == "SuperAdmin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=SUPERADMIN_DELETE_DETAIL,
+        )
+
+
+def _ensure_can_assign_role(actor: User, new_rol: str) -> None:
+    if not new_rol:
+        return
+    if new_rol == "SuperAdmin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=SUPERADMIN_ASSIGN_DETAIL,
+        )
+    if _rank(new_rol) > _rank(actor.rol):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=ROLE_ESCALATION_DETAIL,
+        )
 
 
 @router.get("/", response_model=list[UserResponse])
@@ -45,8 +90,9 @@ def actualizar_usuario(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ) -> User:
-    """Admin: actualiza nombre, rol y estado. Sobre uno mismo solo aplica el nombre."""
+    """Actualiza nombre, rol y estado. Un SuperAdmin ajeno no se toca; sobre uno mismo solo el nombre."""
     usuario = _get_usuario_or_404(db, id_user)
+    _ensure_can_edit(current_user, usuario)
     data = payload.model_dump(exclude_unset=True)
     is_self = id_user == current_user.id_user
 
@@ -55,6 +101,7 @@ def actualizar_usuario(
 
     if not is_self:
         if "rol" in data and data["rol"]:
+            _ensure_can_assign_role(current_user, data["rol"])
             usuario.rol = data["rol"]
         if "estado" in data and data["estado"]:
             usuario.estado = data["estado"]
@@ -79,9 +126,15 @@ def actualizar_rol_usuario(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ) -> User:
-    """Admin: actualiza el rol de otro usuario (Admin | User | Marketing)."""
-    _ensure_not_self(id_user, current_user)
+    """Actualiza el rol de otro usuario. Nadie cambia a un SuperAdmin ni asigna SuperAdmin."""
     usuario = _get_usuario_or_404(db, id_user)
+    _ensure_can_edit(current_user, usuario)
+    if current_user.id_user == usuario.id_user:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No puedes cambiar tu propio rol",
+        )
+    _ensure_can_assign_role(current_user, payload.rol)
     usuario.rol = payload.rol
 
     try:
@@ -103,9 +156,9 @@ def eliminar_usuario(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ) -> None:
-    """Admin: borrado físico de otro usuario."""
-    _ensure_not_self(id_user, current_user)
+    """Borrado físico de otro usuario. Nadie elimina a un SuperAdmin."""
     usuario = _get_usuario_or_404(db, id_user)
+    _ensure_can_delete(current_user, usuario)
     db.delete(usuario)
 
     try:
