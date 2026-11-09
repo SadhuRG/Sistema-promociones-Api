@@ -1,5 +1,6 @@
 """
-Scheduler en background: sync de horarios cada 1 minuto (mes actual).
+Scheduler en background: sync de horarios cada 1 minuto
+(mes calendario actual + mes siguiente).
 Respeta ETag vía orquestador_horarios (sin trabajo si no hay cambios).
 """
 
@@ -10,7 +11,10 @@ import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.db.database import SessionLocal
-from app.services.orquestador_horarios import ejecutar_sync_horarios, rango_mes_actual
+from app.services.orquestador_horarios import (
+    ejecutar_sync_horarios,
+    rango_mes_actual_y_siguiente,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +22,8 @@ scheduler = BackgroundScheduler()
 
 
 def job_sync_horarios_mes_actual() -> None:
-    """Misma orquestación que /horarios/sync-auto, con el mes calendario actual."""
-    fecha_inicio, fecha_fin = rango_mes_actual()
+    """Misma orquestación que /horarios/sync-auto, mes actual + siguiente."""
+    fecha_inicio, fecha_fin = rango_mes_actual_y_siguiente()
     db = SessionLocal()
     try:
         resultado = ejecutar_sync_horarios(

@@ -15,6 +15,7 @@ from app.models.all_models import Doctor, Especialidad
 from app.services.limpieza_horarios import estandarizar_texto
 
 _MEDICO_VACIO = re.compile(r"^[\s\-–—_]*$")
+NOMBRE_ANONIMO = "ANONIMO"
 
 
 class ProcesadorHorariosService:
@@ -71,6 +72,8 @@ class ProcesadorHorariosService:
             )
             df_excel = df_excel.drop(columns=["nombre_std"], errors="ignore")
 
+        self._asignar_anonimo_especialidad(df_excel, db_session)
+
         # ------------------------------------------------------------------
         # Cruce doctores
         # ------------------------------------------------------------------
@@ -93,6 +96,8 @@ class ProcesadorHorariosService:
                 how="left",
             )
             df_excel = df_excel.drop(columns=["nombre_std"], errors="ignore")
+
+        self._asignar_anonimo_doctor(df_excel, db_session)
 
         # ------------------------------------------------------------------
         # Formateo final -> columnas del modelo horario
@@ -125,6 +130,54 @@ class ProcesadorHorariosService:
                 if row.get(col) is not None:
                     row[col] = int(row[col])
         return registros
+
+    def _asignar_anonimo_especialidad(
+        self,
+        df_excel: pd.DataFrame,
+        db_session: Session,
+    ) -> None:
+        if "id_especialidad" not in df_excel.columns:
+            df_excel["id_especialidad"] = None
+        sin_match = df_excel["id_especialidad"].isna()
+        if not sin_match.any():
+            return
+        anonimo_id = self._obtener_o_crear_anonimo(
+            db_session, Especialidad, "id_especialidad"
+        )
+        df_excel.loc[sin_match, "id_especialidad"] = anonimo_id
+
+    def _asignar_anonimo_doctor(
+        self,
+        df_excel: pd.DataFrame,
+        db_session: Session,
+    ) -> None:
+        if "id_doctor" not in df_excel.columns:
+            df_excel["id_doctor"] = None
+        medico = (
+            df_excel["Medico"]
+            if "Medico" in df_excel.columns
+            else pd.Series(pd.NA, index=df_excel.index)
+        )
+        sin_match = df_excel["id_doctor"].isna() & medico.notna()
+        if not sin_match.any():
+            return
+        anonimo_id = self._obtener_o_crear_anonimo(db_session, Doctor, "id_doctor")
+        df_excel.loc[sin_match, "id_doctor"] = anonimo_id
+
+    @staticmethod
+    def _obtener_o_crear_anonimo(
+        db_session: Session,
+        modelo,
+        id_attr: str,
+    ) -> int:
+        filas = db_session.query(modelo).all()
+        for fila in filas:
+            if estandarizar_texto(fila.nombre) == NOMBRE_ANONIMO:
+                return int(getattr(fila, id_attr))
+        nuevo = modelo(nombre=NOMBRE_ANONIMO, estado="Activo")
+        db_session.add(nuevo)
+        db_session.flush()
+        return int(getattr(nuevo, id_attr))
 
     @staticmethod
     def _normalizar_medico(valor: Any) -> Optional[str]:

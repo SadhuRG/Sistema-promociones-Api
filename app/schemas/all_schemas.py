@@ -223,11 +223,11 @@ class HorarioResponse(HorarioBase):
 class HorarioSyncAutoRequest(BaseModel):
     """
     Fechas en formato Imagina: DD/MM/YYYY.
-    Si se omiten, se usa el mes calendario actual.
+    Si se omiten, se usa el mes calendario actual y el siguiente.
     """
 
-    fecha_inicio: Optional[str] = Field(None, examples=["01/10/2026"])
-    fecha_fin: Optional[str] = Field(None, examples=["31/10/2026"])
+    fecha_inicio: Optional[str] = Field(None, examples=["01/11/2026"])
+    fecha_fin: Optional[str] = Field(None, examples=["31/12/2026"])
 
 
 class HorarioSyncAutoResponse(BaseModel):

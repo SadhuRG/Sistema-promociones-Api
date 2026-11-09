@@ -123,7 +123,7 @@ def sync_auto_horarios(
     - up_to_date: Imagina sin cambios reales.
     - success: mirror aplicado ("Horarios actualizados correctamente").
 
-    Fechas opcionales (DD/MM/YYYY); por defecto mes actual.
+    Fechas opcionales (DD/MM/YYYY); por defecto mes actual + mes siguiente.
     """
     try:
         resultado = ejecutar_sync_horarios(

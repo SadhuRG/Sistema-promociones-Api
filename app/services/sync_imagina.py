@@ -1,6 +1,4 @@
-import calendar
 import io
-from datetime import date
 from typing import Any, Optional
 
 import requests
@@ -299,15 +297,9 @@ class ImaginaSyncService:
 
 def _rango_dos_meses() -> tuple[str, str]:
     """Primer dia del mes actual y ultimo dia del siguiente mes (DD/MM/YYYY)."""
-    hoy = date.today()
-    inicio = date(hoy.year, hoy.month, 1)
-    if hoy.month == 12:
-        siguiente_mes, siguiente_anio = 1, hoy.year + 1
-    else:
-        siguiente_mes, siguiente_anio = hoy.month + 1, hoy.year
-    ultimo = calendar.monthrange(siguiente_anio, siguiente_mes)[1]
-    fin = date(siguiente_anio, siguiente_mes, ultimo)
-    return inicio.strftime("%d/%m/%Y"), fin.strftime("%d/%m/%Y")
+    from app.services.orquestador_horarios import rango_mes_actual_y_siguiente
+
+    return rango_mes_actual_y_siguiente()
 
 
 def _prueba_terminal() -> None:

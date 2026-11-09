@@ -30,12 +30,21 @@ def sync_en_curso() -> bool:
     return _SYNC_EN_CURSO
 
 
-def rango_mes_actual() -> tuple[str, str]:
-    """Primer y último día del mes actual en DD/MM/YYYY."""
+def rango_mes_actual_y_siguiente() -> tuple[str, str]:
+    """
+    Primer día del mes calendario actual y último día del mes siguiente.
+
+    Noviembre 2026 -> 01/11/2026, 31/12/2026
+    Diciembre 2026 -> 01/12/2026, 31/01/2027
+    """
     hoy = date.today()
-    ultimo = calendar.monthrange(hoy.year, hoy.month)[1]
     inicio = date(hoy.year, hoy.month, 1)
-    fin = date(hoy.year, hoy.month, ultimo)
+    if hoy.month == 12:
+        siguiente_mes, siguiente_anio = 1, hoy.year + 1
+    else:
+        siguiente_mes, siguiente_anio = hoy.month + 1, hoy.year
+    ultimo = calendar.monthrange(siguiente_anio, siguiente_mes)[1]
+    fin = date(siguiente_anio, siguiente_mes, ultimo)
     return inicio.strftime("%d/%m/%Y"), fin.strftime("%d/%m/%Y")
 
 
@@ -154,7 +163,7 @@ def ejecutar_sync_horarios(
     global _SYNC_EN_CURSO
 
     if not fecha_inicio or not fecha_fin:
-        fecha_inicio, fecha_fin = rango_mes_actual()
+        fecha_inicio, fecha_fin = rango_mes_actual_y_siguiente()
 
     adquirido = _SYNC_LOCK.acquire(blocking=False)
     if not adquirido:
