@@ -15,6 +15,15 @@ from app.models.all_models import Doctor, Especialidad
 from app.services.limpieza_horarios import estandarizar_texto
 
 _MEDICO_VACIO = re.compile(r"^[\s\-–—_]*$")
+_TITULOS_MEDICO = {
+    "DR",
+    "DRA",
+    "DR.",
+    "DRA.",
+    "DOCTOR",
+    "DOCTORA",
+    "MD",
+}
 NOMBRE_ANONIMO = "ANONIMO"
 
 
@@ -83,7 +92,9 @@ class ProcesadorHorariosService:
         if df_doctores.empty:
             df_excel["id_doctor"] = None
         else:
-            df_doctores["nombre_std"] = df_doctores["nombre"].apply(estandarizar_texto)
+            df_doctores["nombre_std"] = df_doctores["nombre"].apply(
+                self._clave_nombre_medico
+            )
             df_doctores = (
                 df_doctores.dropna(subset=["nombre_std"])
                 .drop_duplicates(subset=["nombre_std"], keep="first")
@@ -179,20 +190,33 @@ class ProcesadorHorariosService:
         db_session.flush()
         return int(getattr(nuevo, id_attr))
 
-    @staticmethod
-    def _normalizar_medico(valor: Any) -> Optional[str]:
-        """Estandariza; '-- -- --' / solo guiones -> None."""
+    @classmethod
+    def _normalizar_medico(cls, valor: Any) -> Optional[str]:
+        """Estandariza el nombre; '-- -- --' / solo titulos -> None."""
         if pd.isna(valor):
             return None
+        return cls._clave_nombre_medico(valor)
+
+    @staticmethod
+    def _clave_nombre_medico(valor: Any) -> Optional[str]:
+        """
+        Clave estable para cruzar Excel vs catálogo:
+        mayúsculas, sin tildes, sin DR/DRA, tokens ordenados.
+        Así 'Paola Berenize Jauregui Rojas' coincide con
+        'JAUREGUI ROJAS PAOLA BERENIZE' o 'DRA. PAOLA BERENIZE JAUREGUI ROJAS'.
+        """
         texto = estandarizar_texto(valor)
         if texto is None:
             return None
-        if _MEDICO_VACIO.match(texto.replace(" ", "")) or texto.replace(" ", "") == "":
+        limpio = re.sub(r"[.,;:/\\-]+", " ", texto)
+        if _MEDICO_VACIO.match(limpio.replace(" ", "")) or not limpio.replace(" ", ""):
             return None
-        # Casos tipo "-- -- --"
-        if set(texto.replace(" ", "")) <= {"-"}:
+        if set(limpio.replace(" ", "")) <= {"-"}:
             return None
-        return texto
+        tokens = [token for token in limpio.split() if token not in _TITULOS_MEDICO]
+        if not tokens:
+            return None
+        return " ".join(sorted(tokens))
 
     @staticmethod
     def _formatear_fecha(serie: pd.Series) -> pd.Series:
