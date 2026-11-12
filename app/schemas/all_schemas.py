@@ -274,3 +274,43 @@ class CierreCajaResponse(CierreCajaBase):
 
     id_cierre: int
     created_at: Optional[datetime] = None
+
+
+class CierreExtraerRequest(BaseModel):
+    fecha_inicio: str = Field(..., examples=["2026-11-12"])
+    fecha_fin: str = Field(..., examples=["2026-11-12"])
+    empresa_id: int = 2
+
+
+class CajeroExtracto(BaseModel):
+    nombre: str
+    area: Optional[str] = None
+    efectivo: float = 0
+    pos: float = 0
+    yape: float = 0
+    transferencia: float = 0
+    deposito: float = 0
+    devolucion_monto: float = 0
+    total_neto: float = 0
+
+
+class CierreExtraerResponse(BaseModel):
+    fecha_inicio: str
+    fecha_fin: str
+    cajeros: list[CajeroExtracto]
+    total_cajeros: int
+
+
+class CierreRegistrarRequest(BaseModel):
+    nombre_cajero: str = Field(..., max_length=150)
+    area_cajero: Optional[str] = Field(None, max_length=100)
+    fecha_cierre: date
+    efectivo: Optional[float] = 0
+    pos: Optional[float] = 0
+    yape: Optional[float] = 0
+    transferencia: Optional[float] = 0
+    deposito: Optional[float] = 0
+    devolucion_monto: Optional[float] = 0
+    devolucion_tipo: Optional[str] = Field(None, max_length=50)
+    devolucion_afecta: Optional[str] = Field(None, max_length=50)
+    detalles_adicionales: Optional[str] = None
