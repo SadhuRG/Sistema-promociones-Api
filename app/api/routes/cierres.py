@@ -6,6 +6,7 @@ from app.db.database import get_db
 from app.models.all_models import CierreCaja, User
 from app.schemas.all_schemas import (
     CierreCajaResponse,
+    CierreCajaUpdate,
     CierreExtraerRequest,
     CierreExtraerResponse,
     CierreRegistrarRequest,
@@ -107,6 +108,105 @@ def registrar_cierre(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"No se pudo registrar el cierre: {exc}",
+        ) from exc
+    db.refresh(cierre)
+    return cierre
+
+
+@router.get("", response_model=list[CierreCajaResponse], include_in_schema=False)
+@router.get("/", response_model=list[CierreCajaResponse])
+def listar_cierres(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_superadmin_user),
+) -> list[CierreCaja]:
+    """Lista cierres guardados, del más reciente al más antiguo. No altera filas."""
+    return (
+        db.query(CierreCaja)
+        .order_by(CierreCaja.fecha_cierre.desc(), CierreCaja.id_cierre.desc())
+        .all()
+    )
+
+
+@router.put("/{id_cierre}", response_model=CierreCajaResponse)
+def actualizar_cierre(
+    id_cierre: int,
+    payload: CierreCajaUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_superadmin_user),
+) -> CierreCaja:
+    """Actualiza montos y/o URL del PDF de un cierre existente."""
+    cierre = db.query(CierreCaja).filter(CierreCaja.id_cierre == id_cierre).first()
+    if not cierre:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cierre de caja no encontrado",
+        )
+
+    cambios = payload.model_dump(exclude_unset=True)
+    if "pdf_informe_url" in cambios:
+        cierre.pdf_informe_url = cambios["pdf_informe_url"]
+
+    montos = {
+        "efectivo": float(cambios["efectivo"]) if "efectivo" in cambios else float(cierre.efectivo or 0),
+        "pos": float(cambios["pos"]) if "pos" in cambios else float(cierre.pos or 0),
+        "yape": float(cambios["yape"]) if "yape" in cambios else float(cierre.yape or 0),
+        "transferencia": float(cambios["transferencia"]) if "transferencia" in cambios else float(cierre.transferencia or 0),
+        "deposito": float(cambios["deposito"]) if "deposito" in cambios else float(cierre.deposito or 0),
+        "devolucion_monto": float(cambios["devolucion_monto"]) if "devolucion_monto" in cambios else float(cierre.devolucion_monto or 0),
+        "devolucion_tipo": cambios["devolucion_tipo"] if "devolucion_tipo" in cambios else (cierre.devolucion_tipo or ""),
+        "devolucion_afecta": cambios["devolucion_afecta"] if "devolucion_afecta" in cambios else (cierre.devolucion_afecta or ""),
+    }
+
+    hay_montos = any(
+        campo in cambios
+        for campo in (
+            "efectivo",
+            "pos",
+            "yape",
+            "transferencia",
+            "deposito",
+            "devolucion_monto",
+            "devolucion_tipo",
+            "devolucion_afecta",
+            "total_neto",
+        )
+    )
+    if hay_montos:
+        tipo = montos["devolucion_tipo"] or ""
+        afecta = montos["devolucion_afecta"] or ""
+        dev = montos["devolucion_monto"]
+        if "otra caja" in tipo.lower() and dev > 0 and afecta.strip().lower() not in ("efectivo", "pos"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Seleccione a qué medio afecta la devolución (Efectivo o POS).",
+            )
+        efectivo_final, pos_final, total_neto = calcular_total_neto(
+            efectivo=montos["efectivo"],
+            pos=montos["pos"],
+            yape=montos["yape"],
+            transferencia=montos["transferencia"],
+            deposito=montos["deposito"],
+            devolucion_monto=dev,
+            devolucion_tipo=tipo,
+            devolucion_afecta=afecta,
+        )
+        cierre.efectivo = efectivo_final
+        cierre.pos = pos_final
+        cierre.yape = montos["yape"]
+        cierre.transferencia = montos["transferencia"]
+        cierre.deposito = montos["deposito"]
+        cierre.devolucion_monto = dev
+        cierre.devolucion_tipo = tipo or None
+        cierre.devolucion_afecta = afecta or None
+        cierre.total_neto = total_neto
+
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No se pudo actualizar el cierre: {exc}",
         ) from exc
     db.refresh(cierre)
     return cierre

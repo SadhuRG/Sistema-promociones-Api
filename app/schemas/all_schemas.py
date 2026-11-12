@@ -314,3 +314,16 @@ class CierreRegistrarRequest(BaseModel):
     devolucion_tipo: Optional[str] = Field(None, max_length=50)
     devolucion_afecta: Optional[str] = Field(None, max_length=50)
     detalles_adicionales: Optional[str] = None
+
+
+class CierreCajaUpdate(BaseModel):
+    efectivo: Optional[float] = None
+    pos: Optional[float] = None
+    yape: Optional[float] = None
+    transferencia: Optional[float] = None
+    deposito: Optional[float] = None
+    devolucion_monto: Optional[float] = None
+    devolucion_tipo: Optional[str] = Field(None, max_length=50)
+    devolucion_afecta: Optional[str] = Field(None, max_length=50)
+    total_neto: Optional[float] = None
+    pdf_informe_url: Optional[str] = None
