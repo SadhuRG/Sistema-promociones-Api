@@ -98,6 +98,7 @@ def registrar_cierre(
         devolucion_tipo=tipo or None,
         devolucion_afecta=afecta or None,
         total_neto=total_neto,
+        detalles_adicionales=(payload.detalles_adicionales or None),
         estado="Completado",
     )
     db.add(cierre)
@@ -145,6 +146,8 @@ def actualizar_cierre(
     cambios = payload.model_dump(exclude_unset=True)
     if "pdf_informe_url" in cambios:
         cierre.pdf_informe_url = cambios["pdf_informe_url"]
+    if "detalles_adicionales" in cambios:
+        cierre.detalles_adicionales = cambios["detalles_adicionales"] or None
 
     montos = {
         "efectivo": float(cambios["efectivo"]) if "efectivo" in cambios else float(cierre.efectivo or 0),

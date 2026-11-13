@@ -262,6 +262,7 @@ class CierreCajaBase(BaseModel):
     devolucion_afecta: Optional[str] = Field(None, max_length=50)
     total_neto: float
     pdf_informe_url: Optional[str] = None
+    detalles_adicionales: Optional[str] = None
     estado: Optional[str] = Field("Completado", max_length=50)
 
 
@@ -327,3 +328,4 @@ class CierreCajaUpdate(BaseModel):
     devolucion_afecta: Optional[str] = Field(None, max_length=50)
     total_neto: Optional[float] = None
     pdf_informe_url: Optional[str] = None
+    detalles_adicionales: Optional[str] = None

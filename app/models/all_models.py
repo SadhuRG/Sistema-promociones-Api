@@ -229,6 +229,7 @@ class CierreCaja(Base):
     devolucion_afecta = Column(String(50), nullable=True, default="")
     total_neto = Column(Numeric(12, 2), nullable=False)
     pdf_informe_url = Column(Text, nullable=True)
+    detalles_adicionales = Column(Text, nullable=True)
     estado = Column(String(50), nullable=True, default="Completado")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

@@ -101,7 +101,7 @@ def extraer_cajeros_imagina(
             raise RuntimeError("No se pudo iniciar sesión en Imagina")
 
         if not _preparar_reporte(session, sid, inicio, fin, empresa_id):
-            raise RuntimeError("No se pudo preparar el reporte de cierre en Imagina")
+            raise RuntimeError("No se han detectado datos de este día para extraer de Imagina")
 
         response = session.get(
             url,
@@ -114,9 +114,9 @@ def extraer_cajeros_imagina(
             timeout=120,
         )
         if response.status_code != 200 or not response.content:
-            raise RuntimeError("Falló la descarga del Excel de cierre")
+            raise RuntimeError("No se han detectado datos de este día para extraer de Imagina")
         if not response.content.startswith(b"PK"):
-            raise RuntimeError("Imagina no devolvió un Excel válido de cierre")
+            raise RuntimeError("No se han detectado datos de este día para extraer de Imagina")
 
         cajeros = excel_bytes_a_cajeros(response.content)
         return {
