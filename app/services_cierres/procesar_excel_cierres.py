@@ -26,7 +26,8 @@ def clasificar_pago(raw: Any) -> str:
         return "POS"
     if "depósito" in texto or "deposito" in texto:
         return "DEPOSITO"
-    if "efectivo" in texto:
+    # Solo "Efectivo". "Pago en Efectivo" es un bug de Imagina (suele venir negativo).
+    if texto == "efectivo":
         return "EFECTIVO"
     return ""
 
