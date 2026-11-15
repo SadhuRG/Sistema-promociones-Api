@@ -325,7 +325,7 @@ class UserCierreTipoResponse(BaseModel):
 
 class UserCierreTipoUpdate(BaseModel):
     nombre: str = Field(..., min_length=1, max_length=150)
-    type: str = Field(..., max_length=50)
+    type: str = Field(..., min_length=1, max_length=100)
 
 
 class CierreCajaUpdate(BaseModel):

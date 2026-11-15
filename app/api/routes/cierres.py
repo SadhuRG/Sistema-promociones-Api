@@ -17,8 +17,6 @@ from app.schemas.all_schemas import (
 )
 from app.services_cierres.extraer_cierres import calcular_total_neto, extraer_cajeros_imagina
 
-TIPOS_CAJERO_VALIDOS = {"CAJA", "CALL CENTER"}
-
 
 def _normalizar_nombre_cajero(valor: str) -> str:
     texto = unicodedata.normalize("NFD", str(valor or ""))
@@ -144,11 +142,11 @@ def upsert_tipo_cajero(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_superadmin_user),
 ) -> UserCierreTipoResponse:
-    tipo = str(payload.type or "").strip().upper()
-    if tipo not in TIPOS_CAJERO_VALIDOS:
+    tipo = str(payload.type or "").strip()
+    if not tipo:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El tipo debe ser CAJA o CALL CENTER.",
+            detail="El tipo no puede estar vacío.",
         )
     nombre = payload.nombre.strip()
     clave = _normalizar_nombre_cajero(nombre)
@@ -173,6 +171,39 @@ def upsert_tipo_cajero(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"No se pudo guardar el tipo de cajero: {exc}",
+        ) from exc
+    db.refresh(fila)
+    return UserCierreTipoResponse(id=fila.id, nombre=fila.nombre, type=fila.tipo)
+
+
+@router.put("/tipos-cajero/{id_tipo}", response_model=UserCierreTipoResponse)
+def actualizar_tipo_cajero(
+    id_tipo: int,
+    payload: UserCierreTipoUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_superadmin_user),
+) -> UserCierreTipoResponse:
+    fila = db.query(UserCierreTipo).filter(UserCierreTipo.id == id_tipo).first()
+    if not fila:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tipo de cajero no encontrado.",
+        )
+    tipo = str(payload.type or "").strip()
+    if not tipo:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El tipo no puede estar vacío.",
+        )
+    fila.nombre = payload.nombre.strip()
+    fila.tipo = tipo
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No se pudo actualizar el tipo de cajero: {exc}",
         ) from exc
     db.refresh(fila)
     return UserCierreTipoResponse(id=fila.id, nombre=fila.nombre, type=fila.tipo)
