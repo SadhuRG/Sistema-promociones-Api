@@ -317,6 +317,17 @@ class CierreRegistrarRequest(BaseModel):
     detalles_adicionales: Optional[str] = None
 
 
+class UserCierreTipoResponse(BaseModel):
+    id: int
+    nombre: Optional[str] = None
+    type: Optional[str] = None
+
+
+class UserCierreTipoUpdate(BaseModel):
+    nombre: str = Field(..., min_length=1, max_length=150)
+    type: str = Field(..., max_length=50)
+
+
 class CierreCajaUpdate(BaseModel):
     efectivo: Optional[float] = None
     pos: Optional[float] = None

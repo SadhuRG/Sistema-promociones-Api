@@ -6,6 +6,7 @@ from app.models.all_models import (
     Informe,
     Promocion,
     User,
+    UserCierreTipo,
     informe_especialidad,
     promocion_especialidad,
 )
@@ -18,6 +19,7 @@ __all__ = [
     "Informe",
     "Promocion",
     "User",
+    "UserCierreTipo",
     "informe_especialidad",
     "promocion_especialidad",
 ]

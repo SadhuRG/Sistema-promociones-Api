@@ -1,17 +1,29 @@
+import unicodedata
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_superadmin_user, verify_finance_pin
 from app.db.database import get_db
-from app.models.all_models import CierreCaja, User
+from app.models.all_models import CierreCaja, User, UserCierreTipo
 from app.schemas.all_schemas import (
     CierreCajaResponse,
     CierreCajaUpdate,
     CierreExtraerRequest,
     CierreExtraerResponse,
     CierreRegistrarRequest,
+    UserCierreTipoResponse,
+    UserCierreTipoUpdate,
 )
 from app.services_cierres.extraer_cierres import calcular_total_neto, extraer_cajeros_imagina
+
+TIPOS_CAJERO_VALIDOS = {"CAJA", "CALL CENTER"}
+
+
+def _normalizar_nombre_cajero(valor: str) -> str:
+    texto = unicodedata.normalize("NFD", str(valor or ""))
+    texto = "".join(ch for ch in texto if unicodedata.category(ch) != "Mn")
+    return " ".join(texto.upper().split())
 
 router = APIRouter(
     prefix="/cierres",
@@ -112,6 +124,58 @@ def registrar_cierre(
         ) from exc
     db.refresh(cierre)
     return cierre
+
+
+@router.get("/tipos-cajero", response_model=list[UserCierreTipoResponse])
+def listar_tipos_cajero(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_superadmin_user),
+) -> list[UserCierreTipoResponse]:
+    filas = db.query(UserCierreTipo).order_by(UserCierreTipo.id.asc()).all()
+    return [
+        UserCierreTipoResponse(id=fila.id, nombre=fila.nombre, type=fila.tipo)
+        for fila in filas
+    ]
+
+
+@router.put("/tipos-cajero", response_model=UserCierreTipoResponse)
+def upsert_tipo_cajero(
+    payload: UserCierreTipoUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_superadmin_user),
+) -> UserCierreTipoResponse:
+    tipo = str(payload.type or "").strip().upper()
+    if tipo not in TIPOS_CAJERO_VALIDOS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El tipo debe ser CAJA o CALL CENTER.",
+        )
+    nombre = payload.nombre.strip()
+    clave = _normalizar_nombre_cajero(nombre)
+    fila = next(
+        (
+            item
+            for item in db.query(UserCierreTipo).all()
+            if _normalizar_nombre_cajero(item.nombre) == clave
+        ),
+        None,
+    )
+    if fila:
+        fila.nombre = nombre
+        fila.tipo = tipo
+    else:
+        fila = UserCierreTipo(nombre=nombre, tipo=tipo)
+        db.add(fila)
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No se pudo guardar el tipo de cajero: {exc}",
+        ) from exc
+    db.refresh(fila)
+    return UserCierreTipoResponse(id=fila.id, nombre=fila.nombre, type=fila.tipo)
 
 
 @router.get("", response_model=list[CierreCajaResponse], include_in_schema=False)

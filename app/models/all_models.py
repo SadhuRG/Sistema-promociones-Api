@@ -234,3 +234,12 @@ class CierreCaja(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     admin_registro = relationship("User", back_populates="cierres_caja")
+
+
+class UserCierreTipo(Base):
+    __tablename__ = "user_cierre_tipo"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    nombre = Column(Text, nullable=True)
+    tipo = Column("type", String, nullable=True, default="CAJA")
