@@ -232,6 +232,7 @@ class CierreCaja(Base):
     detalles_adicionales = Column(Text, nullable=True)
     estado = Column(String(50), nullable=True, default="Completado")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     admin_registro = relationship("User", back_populates="cierres_caja")
 

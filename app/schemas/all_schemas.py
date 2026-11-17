@@ -275,6 +275,7 @@ class CierreCajaResponse(CierreCajaBase):
 
     id_cierre: int
     created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
 
 class CierreExtraerRequest(BaseModel):

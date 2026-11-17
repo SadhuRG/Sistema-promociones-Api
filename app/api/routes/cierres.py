@@ -1,4 +1,5 @@
 import unicodedata
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -110,6 +111,7 @@ def registrar_cierre(
         total_neto=total_neto,
         detalles_adicionales=(payload.detalles_adicionales or None),
         estado="Completado",
+        updated_at=datetime.now(timezone.utc),
     )
     db.add(cierre)
     try:
@@ -297,6 +299,8 @@ def actualizar_cierre(
         cierre.devolucion_tipo = tipo or None
         cierre.devolucion_afecta = afecta or None
         cierre.total_neto = total_neto
+
+    cierre.updated_at = datetime.now(timezone.utc)
 
     try:
         db.commit()
