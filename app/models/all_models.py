@@ -138,6 +138,7 @@ class Promocion(Base):
     fecha_fin = Column(Date, nullable=True)
     estado = Column(String(20), default="Activo", nullable=False)
     promocion_img = Column(Text, nullable=True)
+    inactivado_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
 

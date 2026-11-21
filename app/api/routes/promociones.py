@@ -1,4 +1,5 @@
 from datetime import date
+from types import SimpleNamespace
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
@@ -10,6 +11,10 @@ from app.core.storage import upload_image_to_supabase
 from app.db.database import get_db
 from app.models.all_models import Promocion, User, promocion_especialidad
 from app.schemas.all_schemas import PromocionResponse
+from app.services.purgar_promociones import (
+    aplicar_cambio_estado,
+    borrar_imagen_de_promocion,
+)
 
 router = APIRouter(prefix="/promociones", tags=["Promociones"])
 
@@ -96,6 +101,7 @@ async def crear_promocion(
         estado=estado,
         promocion_img=imagen_url,
     )
+    aplicar_cambio_estado(promocion, estado)
     promocion.especialidades = especialidades
 
     db.add(promocion)
@@ -133,7 +139,7 @@ async def actualizar_promocion(
     if fecha_fin is not None:
         promocion.fecha_fin = fecha_fin
     if estado is not None:
-        promocion.estado = estado
+        aplicar_cambio_estado(promocion, estado)
 
     fi = promocion.fecha_inicio
     ff = promocion.fecha_fin
@@ -179,6 +185,10 @@ def eliminar_promocion(
             detail="Promoción no encontrada",
         )
 
+    snapshot_img = SimpleNamespace(
+        id_promocion=promocion.id_promocion,
+        promocion_img=promocion.promocion_img,
+    )
     db.delete(promocion)
     try:
         db.commit()
@@ -188,3 +198,4 @@ def eliminar_promocion(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"No se pudo eliminar la promoción: {exc}",
         ) from exc
+    borrar_imagen_de_promocion(db, snapshot_img)
