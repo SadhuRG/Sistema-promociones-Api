@@ -44,6 +44,16 @@ def _upload_sync(file_bytes: bytes, path: str, content_type: str) -> str:
     return str(public_url)
 
 
+def remove_storage_object(bucket: str, path: str) -> None:
+    """Borra un objeto de un bucket. No hace nada si falta bucket o path."""
+    folder = str(bucket or "").strip()
+    object_path = str(path or "").strip()
+    if not folder or not object_path:
+        return
+    client = get_supabase_client()
+    client.storage.from_(folder).remove([object_path])
+
+
 async def upload_image_to_supabase(file: UploadFile, folder: str) -> str:
     """
     Sube una imagen al bucket público 'flayers' (o el configurado en .env).

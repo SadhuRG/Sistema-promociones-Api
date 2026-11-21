@@ -1,3 +1,4 @@
+import re
 import unicodedata
 from datetime import datetime, timezone
 
@@ -5,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_superadmin_user, verify_finance_pin
+from app.core.storage import remove_storage_object
 from app.db.database import get_db
 from app.models.all_models import CierreCaja, User, UserCierreTipo
 from app.schemas.all_schemas import (
@@ -17,6 +19,18 @@ from app.schemas.all_schemas import (
     UserCierreTipoUpdate,
 )
 from app.services_cierres.extraer_cierres import calcular_total_neto, extraer_cajeros_imagina
+
+CIERRES_PDF_BUCKET = "cierres_pdfs"
+
+
+def _extract_cierre_pdf_path(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if "://" not in text:
+        return re.sub(r"^cierres_pdfs/", "", text)
+    match = re.search(r"cierres_pdfs/([^?]+)", text)
+    return match.group(1) if match else ""
 
 
 def _normalizar_nombre_cajero(valor: str) -> str:
@@ -312,3 +326,49 @@ def actualizar_cierre(
         ) from exc
     db.refresh(cierre)
     return cierre
+
+
+def _borrar_cierre(db: Session, id_cierre: int) -> None:
+    cierre = db.query(CierreCaja).filter(CierreCaja.id_cierre == id_cierre).first()
+    if not cierre:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cierre de caja no encontrado",
+        )
+
+    pdf_path = _extract_cierre_pdf_path(cierre.pdf_informe_url)
+    db.delete(cierre)
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No se pudo eliminar el cierre: {exc}",
+        ) from exc
+
+    if pdf_path:
+        try:
+            remove_storage_object(CIERRES_PDF_BUCKET, pdf_path)
+        except Exception:
+            pass
+
+
+@router.post("/{id_cierre}/eliminar", status_code=status.HTTP_204_NO_CONTENT)
+def eliminar_cierre_post(
+    id_cierre: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_superadmin_user),
+) -> None:
+    """SuperAdmin: borra el cierre y, si existe, su PDF en Storage."""
+    _borrar_cierre(db, id_cierre)
+
+
+@router.delete("/{id_cierre}", status_code=status.HTTP_204_NO_CONTENT)
+def eliminar_cierre(
+    id_cierre: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_superadmin_user),
+) -> None:
+    """SuperAdmin: borra el cierre y, si existe, su PDF en Storage."""
+    _borrar_cierre(db, id_cierre)
